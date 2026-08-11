@@ -4,10 +4,8 @@ import ai.nooa.Agent;
 import ai.nooa.annotations.Generate;
 import ai.nooa.llm.FakeLLMClient;
 import ai.nooa.llm.UnifiedLLM;
-import ai.nooa.strategy.ExecutionResult;
 import org.junit.jupiter.api.*;
 
-import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.*;
 

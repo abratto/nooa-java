@@ -83,8 +83,6 @@ class MemoryDemoAgent extends Agent {
         // Show what remains
         var allActive = memory.query(null, null, 20);
         System.out.println("\nActive records after reflection: " + allActive.size());
-
-        memory.close();
     }
 
     public MemorySkill memory() { return memory; }
@@ -105,25 +103,22 @@ class McpDemoAgent extends Agent {
 public final class Examples10to11 {
 
     public static void main(String[] args) throws Exception {
-        // ---- 10: Memory ----
         var llm = UnifiedLLM.create(
             UnifiedLLM.openAI("sk-demo", "https://api.openai.com/v1")
                 .model("gpt-4o").build());
 
         var memoryAgent = new MemoryDemoAgent(llm);
         memoryAgent.demonstrate();
+        memoryAgent.close();
 
         // ---- 11: MCP Integration ----
         System.out.println("\n=== 11: MCP Integration ===");
 
-        // Connect to a stdio MCP server (e.g., filesystem server)
-        // Requires: npx @modelcontextprotocol/server-filesystem
-        try {
-            var mcp = new ai.nooa.mcp.McpManager()
-                .connectStdio("filesystem", List.of(
-                    "npx", "-y",
-                    "@modelcontextprotocol/server-filesystem",
-                    "/tmp"));
+        try (var mcp = new ai.nooa.mcp.McpManager()) {
+            mcp.connectStdio("filesystem", List.of(
+                "npx", "-y",
+                "@modelcontextprotocol/server-filesystem",
+                "/tmp"));
 
             System.out.println("Connected to MCP server: " + mcp.serverNames());
 
@@ -133,15 +128,11 @@ public final class Examples10to11 {
                 System.out.println("  - " + tool.name() + ": " + tool.description());
             }
 
-            // Call a tool
             var result = mcp.callTool("filesystem", "read_file",
                 Map.of("path", "/tmp/nooa-mcp-test.txt"));
             System.out.println("Tool result: " + result);
-
-            mcp.close();
         } catch (Exception e) {
             System.out.println("MCP demo skipped (install @modelcontextprotocol/server-filesystem)");
-            System.out.println("  npm install -g @modelcontextprotocol/server-filesystem");
         }
 
         System.out.println("\nAll examples demonstrated.");

@@ -1,7 +1,6 @@
 package ai.nooa.runtime;
 
 import ai.nooa.Agent;
-import ai.nooa.NooaException;
 import ai.nooa.config.AgentConfig;
 import ai.nooa.context.ContextWindowStats;
 import ai.nooa.context.Event;
@@ -21,10 +20,7 @@ import io.opentelemetry.context.Scope;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReentrantLock;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Execution engine for agent methods. Uses virtual threads for LLM
@@ -32,7 +28,6 @@ import org.slf4j.LoggerFactory;
  */
 public final class ActorRuntime implements RuntimeServices, AutoCloseable {
 
-    private static final Logger log = LoggerFactory.getLogger(ActorRuntime.class);
 
     private final Agent agent;
     private final AgentConfig config;

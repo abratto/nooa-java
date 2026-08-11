@@ -4,7 +4,6 @@ import ai.nooa.annotations.Generate;
 import ai.nooa.annotations.SystemPrompt;
 import ai.nooa.llm.UnifiedLLM;
 
-import java.util.concurrent.CompletableFuture;
 
 @SystemPrompt("You are a test agent.")
 public class TestPromptedAgent extends Agent {

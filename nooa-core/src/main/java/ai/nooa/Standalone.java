@@ -42,9 +42,12 @@ public final class Standalone {
             var call = CurrentCall.fromMethod(method, args);
 
             try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-                return (T) executor.submit(() ->
+                T result = (T) executor.submit(() ->
                     agent.runtime().callPlan(strategy, call)
                 ).get();
+                return result;
+            } finally {
+                agent.close();
             }
         } catch (Exception e) {
             throw new NooaException("Standalone call failed: " + methodName, e);

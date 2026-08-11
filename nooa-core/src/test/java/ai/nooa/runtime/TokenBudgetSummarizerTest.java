@@ -4,7 +4,6 @@ import ai.nooa.Agent;
 import ai.nooa.annotations.Generate;
 import ai.nooa.context.Event;
 import ai.nooa.llm.FakeLLMClient;
-import ai.nooa.llm.LLMResponse;
 import ai.nooa.llm.UnifiedLLM;
 import org.junit.jupiter.api.*;
 

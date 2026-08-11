@@ -2,7 +2,6 @@ package ai.nooa.cli;
 
 import org.junit.jupiter.api.*;
 
-import java.util.List;
 import java.util.concurrent.*;
 
 import static org.assertj.core.api.Assertions.*;

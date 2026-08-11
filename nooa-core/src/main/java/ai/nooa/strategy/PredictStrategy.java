@@ -1,6 +1,5 @@
 package ai.nooa.strategy;
 
-import ai.nooa.Agent;
 import ai.nooa.GenerationError;
 import ai.nooa.config.PredictConfig;
 import ai.nooa.llm.LLMResponse;

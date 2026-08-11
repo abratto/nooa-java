@@ -6,7 +6,6 @@ import ai.nooa.annotations.Generate;
 import ai.nooa.llm.UnifiedLLM;
 
 import java.util.*;
-import java.util.concurrent.*;
 import java.util.function.Consumer;
 
 /**
@@ -87,19 +86,20 @@ public final class InteractiveAgent {
         output("Type /help for commands, or just type to chat.");
         output("");
 
-        var scanner = new Scanner(System.in);
-        while (running) {
-            System.out.print("> ");
-            if (!scanner.hasNextLine()) break;
-            String input = scanner.nextLine().strip();
-            if (input.isEmpty()) continue;
+        try (var scanner = new Scanner(System.in)) {
+            while (running) {
+                System.out.print("> ");
+                if (!scanner.hasNextLine()) break;
+                String input = scanner.nextLine().strip();
+                if (input.isEmpty()) continue;
 
-            history.add(input);
+                history.add(input);
 
-            if (input.startsWith("/")) {
-                handleCommand(input);
-            } else {
-                handleMessage(input);
+                if (input.startsWith("/")) {
+                    handleCommand(input);
+                } else {
+                    handleMessage(input);
+                }
             }
         }
     }

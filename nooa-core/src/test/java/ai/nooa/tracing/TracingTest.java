@@ -1,6 +1,5 @@
 package ai.nooa.tracing;
 
-import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
 import org.junit.jupiter.api.*;
 

@@ -46,7 +46,7 @@ public final class McpTool implements Closeable {
 
     @Override
     public void close() {
-        client.close();
+        // Client is owned and closed by McpManager. Do NOT close here.
     }
 
     @Override

@@ -18,7 +18,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -359,6 +358,7 @@ public class UnifiedLLM {
         return arr;
     }
 
+    @SuppressWarnings("deprecation")
     private ObjectNode buildStructuredOutputSchema(Class<?> outputModel) {
         ObjectNode schema = JSON.createObjectNode();
         schema.put("type", "json_schema");
@@ -368,7 +368,7 @@ public class UnifiedLLM {
 
         try {
             var schemaGen = JSON.generateJsonSchema(outputModel);
-            jsonSchema.putPOJO("schema", schemaGen);
+            jsonSchema.set("schema", JSON.valueToTree(schemaGen));
         } catch (JsonProcessingException e) {
             log.warn("Could not generate JSON schema for {}", outputModel.getName(), e);
             jsonSchema.put("schema", "{}");

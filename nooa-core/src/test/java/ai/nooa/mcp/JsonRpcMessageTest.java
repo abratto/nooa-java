@@ -1,6 +1,5 @@
 package ai.nooa.mcp;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.*;
 
 import java.util.*;
