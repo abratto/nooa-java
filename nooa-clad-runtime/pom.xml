@@ -10,32 +10,26 @@
         <version>0.1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>nooa-examples</artifactId>
+    <artifactId>nooa-clad-runtime</artifactId>
     <packaging>jar</packaging>
 
-    <name>NOOA Java — Examples</name>
-    <description>Example agents using the NOOA SDK</description>
+    <name>NOOA Java — CLAD Runtime Engine</name>
+    <description>Reference runtime engine for CLAD — ConceptAgent, SyncAgent, RDF action log</description>
 
     <dependencies>
         <dependency>
-            <groupId>ai.nooa</groupId>
-            <artifactId>nooa-core</artifactId>
-            <version>${project.version}</version>
+            <groupId>org.apache.jena</groupId>
+            <artifactId>jena-core</artifactId>
+            <version>5.1.0</version>
         </dependency>
         <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.assertj</groupId>
-            <artifactId>assertj-core</artifactId>
-            <scope>test</scope>
+            <groupId>org.apache.jena</groupId>
+            <artifactId>jena-arq</artifactId>
+            <version>5.1.0</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-simple</artifactId>
-            <scope>test</scope>
+            <artifactId>slf4j-api</artifactId>
         </dependency>
     </dependencies>
 </project>

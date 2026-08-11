@@ -438,6 +438,41 @@ assertThat(result).isEqualTo("Hello, World!");
 mvn test   # 135 tests, all passing
 ```
 
+## CLAD: Contract-Led, Artefact-Driven Development
+
+NOOA ships with a built-in agent for the [CLAD methodology](clad/). CLAD is a
+contracts-first process for building software with AI agents under human review.
+Every change has a contract (CONTEXT.md). Every contract produces an artefact
+(a file on disk). Three human gates ensure correctness before implementation.
+
+**One command to start:**
+
+```bash
+# Clone with the CLAD submodule
+git clone --recurse-submodules https://github.com/abratto/nooa-java.git
+cd nooa-java
+mvn install -DskipTests
+
+# Bootstrap a new CLAD project
+java -jar nooa-clad/target/nooa-clad-0.1.0-SNAPSHOT.jar init my-app
+cd my-app
+
+# Set your API key and run
+export OPENAI_API_KEY=sk-...
+java -jar ../nooa-clad/target/nooa-clad-0.1.0-SNAPSHOT.jar run
+```
+
+**What happens:** The agent reads `CONTEXT.md` contracts, produces artefacts via
+the LLM, runs self-verification against the `Verify` checklist, and stops at
+human gates for review. Auto-advance through mechanical stages with `--auto`.
+
+```bash
+nooa clad run --auto          # auto-advance non-gate stages
+nooa clad run --stage 02_concepts  # run a single stage
+```
+
+See [`nooa-clad/README.md`](nooa-clad/README.md) for the full CLI reference.
+
 ## Why Java?
 
 The Python NOOA framework proves that **agent-as-a-single-class** produces better

@@ -14,6 +14,8 @@
 
     <modules>
         <module>nooa-core</module>
+        <module>nooa-clad-runtime</module>
+        <module>nooa-clad</module>
         <module>nooa-micronaut</module>
         <module>examples</module>
     </modules>
@@ -52,25 +54,21 @@
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter</artifactId>
                 <version>${junit.version}</version>
-                <scope>test</scope>
             </dependency>
             <dependency>
                 <groupId>org.assertj</groupId>
                 <artifactId>assertj-core</artifactId>
                 <version>${assertj.version}</version>
-                <scope>test</scope>
             </dependency>
             <dependency>
                 <groupId>org.mockito</groupId>
                 <artifactId>mockito-core</artifactId>
                 <version>${mockito.version}</version>
-                <scope>test</scope>
             </dependency>
             <dependency>
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-simple</artifactId>
                 <version>${slf4j.version}</version>
-                <scope>test</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>
