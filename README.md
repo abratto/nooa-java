@@ -1,4 +1,13 @@
-# NOOA Java — Object-Oriented Agents
+# NOOA Java — Object-Oriented Agents for Java
+
+**An independent Java port of [NVIDIA's Object-Oriented Agents (NOOA)](https://github.com/nvidia-nemo/labs-OO-Agents) framework.**
+
+The original Python framework by NVIDIA Labs ([research paper](https://arxiv.org/abs/2607.20709),
+[tech blog](https://developer.nvidia.com/blog/six-agent-harness-capabilities-for-higher-model-performance/))
+introduced the agent-as-a-single-class model. This project ports that design to Java 21+,
+adapting Python idioms to the JVM ecosystem while preserving the six core design ideas:
+typed I/O, pass-by-reference, code-as-action, programmable loops, object state,
+and model-callable harness APIs.
 
 An agent is a single Java class. Methods are capabilities, fields are state,
 annotations are metadata. The SDK handles LLM generation, code execution,

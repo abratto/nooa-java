@@ -1,0 +1,22 @@
+NOOA Java
+Copyright 2026
+
+This product includes software developed by NVIDIA Corporation and its
+contributors in the "NVIDIA-labs OO Agents" project
+(https://github.com/nvidia-nemo/labs-OO-Agents), licensed under the
+Apache License, Version 2.0.
+
+The original research paper describing the agent-as-a-single-class
+programming model is:
+
+  Paul Furgale, Severin Klingler, James Nolan, Matt Staats,
+  Gaia Di Lorenzo, Elisa Martinez Abad, Christian Schüller,
+  Razvan Dinu, Alessio Devoto, Pascal Berard, Gal Kaplun,
+  Elad Sarafian, Riccardo Roveri, Leon Derczynski,
+  Ricardo Silveira Cabral.
+  "NVIDIA-labs OO Agents: Native Python Object-Oriented Agents."
+  arXiv:2607.20709, 2026.
+  https://arxiv.org/abs/2607.20709
+
+This Java port is an independent reimplementation and is not
+affiliated with, endorsed by, or maintained by NVIDIA Corporation.
