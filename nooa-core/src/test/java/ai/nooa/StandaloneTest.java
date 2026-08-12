@@ -3,8 +3,6 @@ package ai.nooa;
 import ai.nooa.annotations.Generate;
 import ai.nooa.annotations.Strategy;
 import ai.nooa.llm.FakeLLMClient;
-import ai.nooa.llm.LLMResponse;
-import ai.nooa.llm.UnifiedLLM;
 import ai.nooa.strategy.PredictStrategy;
 import org.junit.jupiter.api.*;
 
@@ -29,14 +27,10 @@ class StandaloneTest {
         var llm = new FakeLLMClient();
         llm.respondWith("Hello, World!");
 
-        // The standalone call will create a transient agent and call the LLM
-        // We verify the method exists and is annotated
-        try {
-            var m = StandaloneMethods.class.getDeclaredMethod("greet", String.class);
-            assertThat(m.isAnnotationPresent(Generate.class)).isTrue();
-        } catch (NoSuchMethodException e) {
-            fail("Method not found");
-        }
+        assertThatCode(() -> StandaloneMethods.class.getDeclaredMethod("greet", String.class))
+            .doesNotThrowAnyException();
+        var m = StandaloneMethods.class.getDeclaredMethod("greet", String.class);
+        assertThat(m.isAnnotationPresent(Generate.class)).isTrue();
     }
 
     @Test

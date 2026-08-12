@@ -5,11 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import ai.nooa.Agent;
-import ai.nooa.AgentFactory;
 import ai.nooa.context.ContextBlock;
 import ai.nooa.context.Event;
 import ai.nooa.llm.LLMResponse;
-import ai.nooa.llm.UnifiedLLM;
 
 import java.nio.file.*;
 import java.time.Instant;
@@ -106,7 +104,6 @@ public final class AgentSnapshot {
         }
     }
 
-    @SuppressWarnings("unchecked")
     private static Map<String, Object> serializeEvent(Event e) {
         var map = new LinkedHashMap<String, Object>();
         map.put("type", e.getClass().getSimpleName());

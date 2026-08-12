@@ -35,8 +35,8 @@ public final class JShellSandbox implements AutoCloseable {
     private final JShell jshell;
     private final ByteArrayOutputStream stdoutCapture = new ByteArrayOutputStream();
     private final ByteArrayOutputStream stderrCapture = new ByteArrayOutputStream();
-    private int executionCount = 0;
     private final long timeoutMs;
+    private long executionCount;
 
     public JShellSandbox(Agent agent) {
         this(agent, DEFAULT_TIMEOUT_MS);
@@ -66,11 +66,12 @@ public final class JShellSandbox implements AutoCloseable {
             "var __context__ = __agent__.context();\n"
             + "var __events__ = __agent__.events();");
 
-        jshell.eval(
-            "Object returnResult(Object value) {\n"
-            + "    ai.nooa.runtime.sandbox.SandboxContext.setReturnValue(value);\n"
-            + "    return value;\n"
-            + "}");
+        jshell.eval("""
+            Object returnResult(Object value) {
+                ai.nooa.runtime.sandbox.SandboxContext.setReturnValue(value);
+                return value;
+            }
+            """);
     }
 
     /**
@@ -78,6 +79,7 @@ public final class JShellSandbox implements AutoCloseable {
      */
     public ExecutionResult execute(String code) {
         executionCount++;
+        log.debug("Sandbox execution #{}", executionCount);
         stdoutCapture.reset();
         stderrCapture.reset();
 
@@ -87,29 +89,28 @@ public final class JShellSandbox implements AutoCloseable {
 
         try {
             return executeWithTimeout(code);
-        } catch (TimeoutException e) {
+        } catch (TimeoutException _) {
             return new ExecutionResult("", "", "Execution timed out after " + timeoutMs + "ms",
                 null, false);
         }
     }
 
     private ExecutionResult executeWithTimeout(String code) throws TimeoutException {
-        ExecutorService executor = Executors.newSingleThreadExecutor();
-        Future<ExecutionResult> future = executor.submit(() -> {
-            List<SnippetEvent> events = jshell.eval(code);
-            return buildResult(events);
-        });
+        try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+            Future<ExecutionResult> future = executor.submit(() -> {
+                List<SnippetEvent> events = jshell.eval(code);
+                return buildResult(events);
+            });
 
-        try {
-            return future.get(timeoutMs, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return new ExecutionResult("", "", "Interrupted", null, false);
-        } catch (java.util.concurrent.ExecutionException e) {
-            return new ExecutionResult("", "",
-                e.getCause() != null ? e.getCause().getMessage() : e.getMessage(), null, false);
-        } finally {
-            executor.shutdownNow();
+            try {
+                return future.get(timeoutMs, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException _) {
+                Thread.currentThread().interrupt();
+                return new ExecutionResult("", "", "Interrupted", null, false);
+            } catch (java.util.concurrent.ExecutionException e) {
+                return new ExecutionResult("", "",
+                    e.getCause() != null ? e.getCause().getMessage() : e.getMessage(), null, false);
+            }
         }
     }
 
@@ -155,39 +156,47 @@ public final class JShellSandbox implements AutoCloseable {
     }
 
     private boolean containsBlockedImports(String code) {
-        // Hard blocklist — these APIs are never allowed regardless of permissions
         for (String blocked : BLOCKED_PACKAGES) {
-            if (code.contains(blocked)) {
-                log.warn("Blocked API usage: {}", blocked);
+            if (!code.contains(blocked)) {
+                continue;
+            }
 
-                // Check if permissions would allow this
-                var perms = SandboxContext.getAgent().permissions();
-                if (blocked.startsWith("java.io.File") || blocked.startsWith("java.nio.file")) {
-                    // File access — check permissions for each file path in the code
-                    java.util.regex.Matcher m = java.util.regex.Pattern.compile(
-                        "\"(/[^\"]+)\"|'([^']+)'").matcher(code);
-                    boolean allAllowed = false;
-                    while (m.find()) {
-                        String path = m.group(1) != null ? m.group(1) : m.group(2);
-                        if (path != null && perms.checkFile(path) == ai.nooa.security.Permissions.Level.ALLOW) {
-                            allAllowed = true;
-                        }
-                    }
-                    if (allAllowed) return false; // permissions allow it
-                }
-                if (blocked.equals("java.net.URL") || blocked.equals("java.net.URI")) {
-                    // Network access — check permissions for URLs
-                    java.util.regex.Matcher urlMatcher = java.util.regex.Pattern.compile(
-                        "\"(https?://[^\"]+)\"|'(https?://[^']+)'").matcher(code);
-                    boolean allAllowed = false;
-                    while (urlMatcher.find()) {
-                        String url = urlMatcher.group(1) != null ? urlMatcher.group(1) : urlMatcher.group(2);
-                        if (url != null && perms.checkUrl(url) == ai.nooa.security.Permissions.Level.ALLOW) {
-                            allAllowed = true;
-                        }
-                    }
-                    if (allAllowed) return false;
-                }
+            log.warn("Blocked API usage: {}", blocked);
+            var perms = SandboxContext.getAgent().permissions();
+            return !isAllowedByPermissions(code, blocked, perms);
+        }
+        return false;
+    }
+
+    private boolean isAllowedByPermissions(String code, String blocked,
+            ai.nooa.security.Permissions perms) {
+        if (blocked.startsWith("java.io.File") || blocked.startsWith("java.nio.file")) {
+            return isFileAccessAllowed(code, perms);
+        }
+        if (blocked.equals("java.net.URL") || blocked.equals("java.net.URI")) {
+            return isUrlAccessAllowed(code, perms);
+        }
+        return false;
+    }
+
+    private boolean isFileAccessAllowed(String code, ai.nooa.security.Permissions perms) {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(
+            "\"(/[^\"]+)\"|'([^']+)'").matcher(code);
+        while (matcher.find()) {
+            String path = matcher.group(1) != null ? matcher.group(1) : matcher.group(2);
+            if (path != null && perms.checkFile(path) == ai.nooa.security.Permissions.Level.ALLOW) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isUrlAccessAllowed(String code, ai.nooa.security.Permissions perms) {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(
+            "\"(https?://[^\"]+)\"|'(https?://[^']+)'").matcher(code);
+        while (matcher.find()) {
+            String url = matcher.group(1) != null ? matcher.group(1) : matcher.group(2);
+            if (url != null && perms.checkUrl(url) == ai.nooa.security.Permissions.Level.ALLOW) {
                 return true;
             }
         }

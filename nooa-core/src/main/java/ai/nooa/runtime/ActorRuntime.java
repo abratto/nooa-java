@@ -54,7 +54,8 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
         agent.eventManager().add(new Event.LLMCallStart(llm.model()));
 
         Span span = Tracing.startLLMSpan(llm.model());
-        try (Scope ignored = span.makeCurrent()) {
+        Scope scope = span.makeCurrent();
+        try {
             LLMResponse response = llm.chat(messages, tools, outputModel, samplingParams);
 
             int blocksChars = estimateChars(agent.contextManager().render(agent));
@@ -76,6 +77,7 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
             span.recordException(e);
             throw e;
         } finally {
+            scope.close();
             span.end();
         }
     }
@@ -84,12 +86,14 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
     public ExecutionResult executeCode(String code, Map<String, Object> builtins) {
         if (sandbox == null) { sandbox = new JShellSandbox(agent); }
         Span span = Tracing.startCodeExecutionSpan();
-        try (Scope ignored = span.makeCurrent()) {
+        Scope scope = span.makeCurrent();
+        try {
             ExecutionResult result = sandbox.execute(code);
             if (result.success()) span.setStatus(StatusCode.OK);
             else span.setStatus(StatusCode.ERROR, result.error());
             return result;
         } finally {
+            scope.close();
             span.end();
         }
     }
@@ -123,7 +127,8 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
         inGenerationSession.set(true);
         Span span = Tracing.startAgentSpan(
             agent.getClass().getSimpleName(), call.method().getName());
-        try (Scope ignored = span.makeCurrent()) {
+        Scope scope = span.makeCurrent();
+        try {
             agent.eventManager().add(new Event.BeforeAgentCall(
                 call.method().getName(), true));
             agent.eventManager().add(new Event.Task(call.docstring()));
@@ -139,8 +144,9 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
             span.recordException(e);
             throw e;
         } finally {
+            scope.close();
             span.end();
-            inGenerationSession.set(false);
+            inGenerationSession.remove();
             generationLock.unlock();
         }
     }
@@ -151,7 +157,7 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
             agent.eventManager().add(new Event.Task(call.docstring()));
             return strategy.execute(this, call);
         } finally {
-            inGenerationSession.set(false);
+            inGenerationSession.remove();
         }
     }
 

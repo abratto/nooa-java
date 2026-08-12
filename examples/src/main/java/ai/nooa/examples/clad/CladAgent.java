@@ -6,7 +6,6 @@ import ai.nooa.annotations.Hidden;
 import ai.nooa.annotations.Strategy;
 import ai.nooa.annotations.SystemPrompt;
 import ai.nooa.llm.UnifiedLLM;
-import ai.nooa.security.Permissions;
 import ai.nooa.strategy.PredictStrategy;
 import ai.nooa.tools.ShellTools;
 
