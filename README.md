@@ -454,12 +454,12 @@ cd nooa-java
 mvn install -DskipTests
 
 # Bootstrap a new CLAD project
-java -jar nooa-clad/target/nooa-clad-0.1.0-SNAPSHOT.jar init my-app
+java -jar nooa-clad/target/nooa-clad-0.1.0.jar init my-app
 cd my-app
 
 # Set your API key and run
 export OPENAI_API_KEY=sk-...
-java -jar ../nooa-clad/target/nooa-clad-0.1.0-SNAPSHOT.jar run
+java -jar ../nooa-clad/target/nooa-clad-0.1.0.jar run
 ```
 
 **What happens:** The agent reads `CONTEXT.md` contracts, produces artefacts via
