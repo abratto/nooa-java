@@ -21,14 +21,14 @@
     </modules>
 
     <properties>
-        <maven.compiler.release>21</maven.compiler.release>
+        <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <byte-buddy.version>1.14.18</byte-buddy.version>
-        <jackson.version>2.18.0</jackson.version>
+        <byte-buddy.version>1.18.11</byte-buddy.version>
+        <jackson.version>2.18.9</jackson.version>
         <slf4j.version>2.0.16</slf4j.version>
         <junit.version>5.11.3</junit.version>
-        <assertj.version>3.26.3</assertj.version>
+        <assertj.version>3.27.7</assertj.version>
         <mockito.version>5.14.2</mockito.version>
         <micronaut.version>4.7.0</micronaut.version>
     </properties>
@@ -80,7 +80,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
-                    <release>21</release>
+                    <release>25</release>
                     <parameters>true</parameters>
                 </configuration>
             </plugin>

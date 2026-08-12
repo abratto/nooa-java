@@ -4,7 +4,7 @@
 
 The original Python framework by NVIDIA Labs ([research paper](https://arxiv.org/abs/2607.20709),
 [tech blog](https://developer.nvidia.com/blog/six-agent-harness-capabilities-for-higher-model-performance/))
-introduced the agent-as-a-single-class model. This project ports that design to Java 21+,
+introduced the agent-as-a-single-class model. This project ports that design to Java 25+,
 adapting Python idioms to the JVM ecosystem while preserving the six core design ideas:
 typed I/O, pass-by-reference, code-as-action, programmable loops, object state,
 and model-callable harness APIs.
@@ -33,7 +33,7 @@ String greeting = agent.greet("Alice");
 System.out.println(greeting);
 ```
 
-**Requirements:** Java 21+ · Maven 3.9+
+**Requirements:** Java 25+ · Maven 3.9+
 
 ```xml
 <dependency>

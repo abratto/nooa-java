@@ -31,7 +31,7 @@ mvn clean install -DskipTests   # build all modules
 mvn test                         # run all tests
 ```
 
-Requirements: Java 21+, Maven 3.9+
+Requirements: Java 25+, Maven 3.9+
 
 ## Release
 
@@ -48,7 +48,7 @@ git push origin main vX.Y.Z
 
 ## Code Style
 
-- Java 21 idioms: records, sealed interfaces, pattern matching, virtual threads
+- Java 25 idioms: records, sealed interfaces, pattern matching, virtual threads
 - One public class per file
 - `@Hidden` on framework internals, public by default
 - SLF4J for logging (not System.out)
