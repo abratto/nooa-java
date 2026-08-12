@@ -1,6 +1,16 @@
 # Changelog
 
-## v0.1.0 (unreleased)
+## v0.2.0 (2026-08-12)
+
+### Changed
+- Upgraded Java runtime target from 21 to **25 LTS**
+- Upgraded byte-buddy 1.14.18 → 1.18.11 (Java 25 class file support)
+
+### Security
+- jackson-databind 2.18.0 → 2.18.9 — fixes 7 CVEs including HIGH-severity polymorphic type-validator bypass (CVE-2026-54512, CVE-2026-54513) and SSRF/`@JsonView` bypass issues
+- assertj-core 3.26.3 → 3.27.7 — fixes CVE-2026-24400 (HIGH: XXE in `isXmlEqualTo`)
+
+## v0.1.0 (2026-07-01)
 
 First public release. Independent Java port of NVIDIA's Object-Oriented Agents
 framework, targeting Java 21+ with virtual threads, JShell sandbox, and a
