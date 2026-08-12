@@ -13,6 +13,21 @@ An agent is a single Java class. Methods are capabilities, fields are state,
 annotations are metadata. The SDK handles LLM generation, code execution,
 and structured output enforcement.
 
+## Repository layout and CLAD submodule
+
+This repository contains the Java SDK and runtime for NOOA. The CLAD methodology
+and agent tooling live in a separate repository that is connected here as a Git
+submodule at [clad](clad).
+
+This is intentional:
+
+- the root repository tracks the Java SDK implementation
+- the [clad](clad) directory is a separate Git repo with its own history and workflow
+- the parent repo tracks the submodule by commit pointer, so updates to CLAD are
+  pulled in deliberately rather than copied into the root repository automatically
+
+For the exact rules and expected workflow, see [docs/clad-submodule.md](docs/clad-submodule.md).
+
 ## Quick Start
 
 ```java
