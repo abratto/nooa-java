@@ -39,6 +39,22 @@ class SupportAgent extends Agent {
     public String checkOrder(String item, int quantity) { throw new UnsupportedOperationException(); }
 }
 
+@SystemPrompt("You summarise incoming news articles into a short digest.")
+class NewsDigestAgent extends Agent {
+    public NewsDigestAgent(UnifiedLLM llm) { super(llm); }
+
+    String fetchArticle() {
+        return "Acme announced a new battery chemistry that cuts charging time by 40% while reducing heat and extending cycle life.";
+    }
+
+    @Generate
+    public String summarizeNews(String articleText) { throw new UnsupportedOperationException(); }
+
+    public String digestCurrentNews() {
+        return summarizeNews(fetchArticle());
+    }
+}
+
 public final class QuickstartExamples {
 
     public static void main(String[] args) throws Exception {
@@ -60,5 +76,10 @@ public final class QuickstartExamples {
             Map.of("widget", 5, "gadget", 0));
         System.out.println("Agent created. Would call: supportAgent.checkOrder(\"widget\", 3)");
         supportAgent.close();
+
+        System.out.println("\n--- Example 4: Periodic News Digest ---");
+        var newsAgent = AgentFactory.create(NewsDigestAgent.class, llm);
+        System.out.println("Agent created. Would call: newsAgent.digestCurrentNews() ");
+        newsAgent.close();
     }
 }
