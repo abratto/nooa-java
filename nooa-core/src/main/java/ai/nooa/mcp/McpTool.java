@@ -2,14 +2,13 @@ package ai.nooa.mcp;
 
 import ai.nooa.llm.Tool;
 
-import java.io.Closeable;
 import java.util.Map;
 
 /**
  * Agent-callable wrapper for an MCP tool. Each instance manages its own
  * MCP connection. Callable from generated agent code.
  */
-public final class McpTool implements Closeable {
+public final class McpTool {
 
     private final String serverName;
     private final String toolName;
@@ -42,11 +41,6 @@ public final class McpTool implements Closeable {
             spec.description(),
             schema
         );
-    }
-
-    @Override
-    public void close() {
-        // Client is owned and closed by McpManager. Do NOT close here.
     }
 
     @Override

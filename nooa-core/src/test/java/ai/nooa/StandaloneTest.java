@@ -3,8 +3,6 @@ package ai.nooa;
 import ai.nooa.annotations.Generate;
 import ai.nooa.annotations.Strategy;
 import ai.nooa.llm.FakeLLMClient;
-import ai.nooa.llm.LLMResponse;
-import ai.nooa.llm.UnifiedLLM;
 import ai.nooa.strategy.PredictStrategy;
 import org.junit.jupiter.api.*;
 
@@ -25,23 +23,19 @@ class StandaloneTest {
 
     @Test
     @DisplayName("call resolves method and invokes strategy")
-    void callResolvesMethod() {
+    void callResolvesMethod() throws Exception {
         var llm = new FakeLLMClient();
         llm.respondWith("Hello, World!");
 
-        // The standalone call will create a transient agent and call the LLM
-        // We verify the method exists and is annotated
-        try {
-            var m = StandaloneMethods.class.getDeclaredMethod("greet", String.class);
-            assertThat(m.isAnnotationPresent(Generate.class)).isTrue();
-        } catch (NoSuchMethodException e) {
-            fail("Method not found");
-        }
+        assertThatCode(() -> StandaloneMethods.class.getDeclaredMethod("greet", String.class))
+            .doesNotThrowAnyException();
+        var m = StandaloneMethods.class.getDeclaredMethod("greet", String.class);
+        assertThat(m.isAnnotationPresent(Generate.class)).isTrue();
     }
 
     @Test
     @DisplayName("@Generate annotation is required")
-    void requiresGenerateAnnotation() {
+    void requiresGenerateAnnotation() throws Exception {
         var llm = new FakeLLMClient();
         // toString on Object has 0 params — will match findMethod but is not @Generate
         assertThatThrownBy(() -> Standalone.call(llm, Object.class, "toString"))

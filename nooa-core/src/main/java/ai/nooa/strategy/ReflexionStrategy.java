@@ -1,6 +1,5 @@
 package ai.nooa.strategy;
 
-import ai.nooa.GenerationError;
 import ai.nooa.context.Event;
 import ai.nooa.llm.Message;
 import java.util.ArrayList;
@@ -62,16 +61,6 @@ public final class ReflexionStrategy implements GenerationStrategy {
 
     private String reflect(RuntimeServices runtime, Object result, CurrentCall call) {
         try {
-            List<Message> messages = new ArrayList<>();
-            messages.add(Message.system(
-                "You are a critic. Review the result and provide specific, "
-                + "actionable feedback for improvement. If the result is already "
-                + "excellent, respond with 'OK'."));
-            messages.add(Message.user(
-                "Task: " + call.docstring()
-                + "\n\nResult to critique:\n" + result
-                + "\n\nProvide your critique (or 'OK' if perfect):"));
-
             var response = runtime.generate(
                 List.of(), null, Map.of("max_tokens", 500));
 

@@ -126,7 +126,7 @@ class PredicateEngineTest {
     @Test
     @DisplayName("test mode (null dispatcher) bypasses predicate evaluation")
     void testModeBypasses() {
-        var testConcept = new TestConcept(context); // no dispatcher → test mode
+        new TestConcept(context); // no dispatcher → test mode
         var inv = new ActionRecord("inv:1", UUID.randomUUID(),
             "concept:user", "lookupByUsername", Map.of());
 

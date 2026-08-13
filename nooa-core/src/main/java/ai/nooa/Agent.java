@@ -1,12 +1,8 @@
 package ai.nooa;
 
-import ai.nooa.annotations.Generate;
 import ai.nooa.annotations.Hidden;
-import ai.nooa.annotations.NoTrace;
-import ai.nooa.annotations.Strategy;
 import ai.nooa.annotations.SystemPrompt;
 import ai.nooa.config.AgentConfig;
-import ai.nooa.config.CodeActConfig;
 import ai.nooa.context.ContextBlock;
 import ai.nooa.runtime.ActorRuntime;
 import ai.nooa.runtime.ContextApi;
@@ -17,8 +13,6 @@ import ai.nooa.agentdoc.AgentDoc;
 import ai.nooa.llm.UnifiedLLM;
 import ai.nooa.security.PermissionCallback;
 import ai.nooa.security.Permissions;
-import ai.nooa.strategy.CodeActStrategy;
-import ai.nooa.strategy.GenerationStrategy;
 
 import java.lang.reflect.Method;
 import java.util.Map;

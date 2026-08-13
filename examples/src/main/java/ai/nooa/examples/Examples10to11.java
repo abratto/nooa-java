@@ -1,16 +1,16 @@
 package ai.nooa.examples;
 
 import ai.nooa.Agent;
-import ai.nooa.AgentFactory;
 import ai.nooa.annotations.Generate;
 import ai.nooa.llm.UnifiedLLM;
 import ai.nooa.memory.MemorySkill;
 import ai.nooa.memory.MemoryStore;
-import ai.nooa.memory.MemoryRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 // =========================================================================
@@ -18,6 +18,8 @@ import java.util.Map;
 // =========================================================================
 
 class MemoryDemoAgent extends Agent {
+    private static final String PREFERENCE_TAG = "preference";
+    private static final Logger log = LoggerFactory.getLogger(MemoryDemoAgent.class);
     private final MemorySkill memory;
 
     public MemoryDemoAgent(UnifiedLLM llm) {
@@ -29,52 +31,51 @@ class MemoryDemoAgent extends Agent {
 
     // Memory operations called from orchestrator (not @Generate)
     void seedMemories() {
-        memory.write("preference", "User prefers dark mode in editor", 0.8,
-            List.of("preference", "ui", "editor"));
+        memory.write(PREFERENCE_TAG, "User prefers dark mode in editor", 0.8,
+            List.of(PREFERENCE_TAG, "ui", "editor"));
         memory.write("fact", "Project uses Java 21 with virtual threads", 0.9,
             List.of("tech", "java", "project"));
         memory.write("episode", "Fixed NullPointerException in AuthService.login()", 0.7,
             List.of("bugfix", "auth", "java"));
         memory.write("insight", "Virtual threads eliminated 90% of CompletableFuture usage", 0.85,
             List.of("tech", "java", "performance"));
-        memory.write("preference", "User wants error messages in plain English, not stacktraces", 0.6,
-            List.of("preference", "ui", "error"));
+        memory.write(PREFERENCE_TAG, "User wants error messages in plain English, not stacktraces", 0.6,
+            List.of(PREFERENCE_TAG, "ui", "error"));
     }
 
     void demonstrate() {
-        System.out.println("=== 10: Memory ===");
+        log.info("=== 10: Memory ===");
 
         // Write records with typed importance and tags
         seedMemories();
 
         // Recall relevant records by tag intersection
         var techMemories = memory.recall(List.of("tech", "java"), 5);
-        System.out.println("\nTech memories (" + techMemories.size() + "):");
+        log.info("\nTech memories ({}):", techMemories.size());
         for (var m : techMemories) {
-            System.out.println("  [" + m.type() + "] " + m.content()
-                + " (importance: " + String.format("%.2f", m.importance()) + ")");
+            var importance = String.format(Locale.ROOT, "%.2f", m.importance());
+            log.info("  [{}] {} (importance: {})", m.type(), m.content(), importance);
         }
 
         // Query by type
-        var preferences = memory.query("preference", null, 10);
-        System.out.println("\nPreferences (" + preferences.size() + "):");
-        preferences.forEach(p -> System.out.println("  - " + p.content()));
+        var preferences = memory.query(PREFERENCE_TAG, null, 10);
+        log.info("\nPreferences ({}):", preferences.size());
+        preferences.forEach(p -> log.info("  - {}", p.content()));
 
         // Create relationships between records
         if (techMemories.size() >= 2) {
-            var r1 = techMemories.get(0);
+            var r1 = techMemories.getFirst();
             var r2 = techMemories.get(1);
             memory.relate(r1.id().toString(), "supports", r2.id().toString());
-            System.out.println("\nLinked: " + r1.type() + " → supports → " + r2.type());
+            log.info("\nLinked: {} → supports → {}", r1.type(), r2.type());
         }
 
         // Forget a record
         if (!preferences.isEmpty()) {
-            var toForget = preferences.get(0);
+            var toForget = preferences.getFirst();
             memory.forget(toForget.id().toString());
-            var stillActive = memory.recall(List.of("preference"), 5);
-            System.out.println("\nAfter forget: " + stillActive.size()
-                + " active preferences (was " + preferences.size() + ")");
+            var stillActive = memory.recall(List.of(PREFERENCE_TAG), 5);
+            log.info("\nAfter forget: {} active preferences (was {})", stillActive.size(), preferences.size());
         }
 
         // Run reflection — merges duplicates, prunes stale
@@ -82,7 +83,7 @@ class MemoryDemoAgent extends Agent {
 
         // Show what remains
         var allActive = memory.query(null, null, 20);
-        System.out.println("\nActive records after reflection: " + allActive.size());
+        log.info("\nActive records after reflection: {}", allActive.size());
     }
 
     public MemorySkill memory() { return memory; }
@@ -101,8 +102,15 @@ class McpDemoAgent extends Agent {
 }
 
 public final class Examples10to11 {
+    private static final String FILESYSTEM_SERVER = "filesystem";
+    private static final String MCP_TEST_PATH = "nooa-mcp-test.txt";
+    private static final Logger log = LoggerFactory.getLogger(Examples10to11.class);
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
+        if (args.length > 0) {
+            log.info("Demo args provided: {}", args.length);
+        }
+
         var llm = UnifiedLLM.create(
             UnifiedLLM.openAI("sk-demo", "https://api.openai.com/v1")
                 .model("gpt-4o").build());
@@ -112,29 +120,29 @@ public final class Examples10to11 {
         memoryAgent.close();
 
         // ---- 11: MCP Integration ----
-        System.out.println("\n=== 11: MCP Integration ===");
+        log.info("\n=== 11: MCP Integration ===");
 
         try (var mcp = new ai.nooa.mcp.McpManager()) {
-            mcp.connectStdio("filesystem", List.of(
+            mcp.connectStdio(FILESYSTEM_SERVER, List.of(
                 "npx", "-y",
                 "@modelcontextprotocol/server-filesystem",
-                "/tmp"));
+                System.getProperty("user.home")));
 
-            System.out.println("Connected to MCP server: " + mcp.serverNames());
+            log.info("Connected to MCP server: {}", mcp.serverNames());
 
-            var tools = mcp.toolsFor("filesystem");
-            System.out.println("Discovered tools: " + tools.size());
+            var tools = mcp.toolsFor(FILESYSTEM_SERVER);
+            log.info("Discovered tools: {}", tools.size());
             for (var tool : tools) {
-                System.out.println("  - " + tool.name() + ": " + tool.description());
+                log.info("  - {}: {}", tool.name(), tool.description());
             }
 
-            var result = mcp.callTool("filesystem", "read_file",
-                Map.of("path", "/tmp/nooa-mcp-test.txt"));
-            System.out.println("Tool result: " + result);
-        } catch (Exception e) {
-            System.out.println("MCP demo skipped (install @modelcontextprotocol/server-filesystem)");
+            var result = mcp.callTool(FILESYSTEM_SERVER, "read_file",
+                Map.of("path", Path.of(System.getProperty("user.home"), MCP_TEST_PATH).toString()));
+            log.info("Tool result: {}", result);
+        } catch (Exception _) {
+            log.info("MCP demo skipped (install @modelcontextprotocol/server-filesystem)");
         }
 
-        System.out.println("\nAll examples demonstrated.");
+        log.info("\nAll examples demonstrated.");
     }
 }

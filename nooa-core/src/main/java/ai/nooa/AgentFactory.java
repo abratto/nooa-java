@@ -2,14 +2,11 @@ package ai.nooa;
 
 import ai.nooa.annotations.Generate;
 import ai.nooa.annotations.Strategy;
-import ai.nooa.config.CodeActConfig;
 import ai.nooa.llm.UnifiedLLM;
-import ai.nooa.strategy.CodeActStrategy;
 import ai.nooa.strategy.CurrentCall;
 import ai.nooa.strategy.GenerationStrategy;
 import ai.nooa.strategy.MethodDocStore;
 import net.bytebuddy.ByteBuddy;
-import net.bytebuddy.description.annotation.AnnotationDescription;
 import net.bytebuddy.dynamic.loading.ClassLoadingStrategy;
 import net.bytebuddy.implementation.MethodDelegation;
 import net.bytebuddy.implementation.bind.annotation.AllArguments;
@@ -113,37 +110,40 @@ public final class AgentFactory {
     private static Agent instantiate(Class<? extends Agent> instrumentedClass,
                                       UnifiedLLM llm, Object[] extraArgs) {
         try {
-            // Build constructor arg list: UnifiedLLM + extra args
-            Object[] allArgs = new Object[1 + extraArgs.length];
-            allArgs[0] = llm;
-            System.arraycopy(extraArgs, 0, allArgs, 1, extraArgs.length);
-
-            // Find matching constructor
+            Object[] allArgs = buildConstructorArgs(llm, extraArgs);
             for (Constructor<?> ctor : instrumentedClass.getDeclaredConstructors()) {
-                Class<?>[] paramTypes = ctor.getParameterTypes();
-                if (paramTypes.length == allArgs.length) {
-                    boolean match = true;
-                    for (int i = 0; i < paramTypes.length; i++) {
-                        if (allArgs[i] != null
-                            && !paramTypes[i].isAssignableFrom(allArgs[i].getClass())) {
-                            match = false;
-                            break;
-                        }
-                    }
-                    if (match) {
-                        ctor.setAccessible(true);
-                        return (Agent) ctor.newInstance(allArgs);
-                    }
+                if (matchesConstructor(ctor, allArgs)) {
+                    return (Agent) ctor.newInstance(allArgs);
                 }
             }
             throw new NooaException(
                 "No matching constructor found for " + instrumentedClass.getName());
         } catch (NooaException e) {
             throw e;
-        } catch (Exception e) {
+        } catch (ReflectiveOperationException e) {
             throw new NooaException(
                 "Failed to instantiate " + instrumentedClass.getName(), e);
         }
+    }
+
+    private static Object[] buildConstructorArgs(UnifiedLLM llm, Object[] extraArgs) {
+        Object[] allArgs = new Object[1 + extraArgs.length];
+        allArgs[0] = llm;
+        System.arraycopy(extraArgs, 0, allArgs, 1, extraArgs.length);
+        return allArgs;
+    }
+
+    private static boolean matchesConstructor(Constructor<?> ctor, Object[] args) {
+        Class<?>[] paramTypes = ctor.getParameterTypes();
+        if (paramTypes.length != args.length) {
+            return false;
+        }
+        for (int i = 0; i < paramTypes.length; i++) {
+            if (args[i] != null && !paramTypes[i].isAssignableFrom(args[i].getClass())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static String extractJavadoc(Method method) {
@@ -167,6 +167,9 @@ public final class AgentFactory {
      */
     public static class GenerateInterceptor {
 
+        private GenerateInterceptor() {
+        }
+
         /**
          * Intercept @Generate method calls. Submits work to a virtual thread
          * so blocking LLM calls don't occupy platform threads.
@@ -177,19 +180,25 @@ public final class AgentFactory {
             @Origin Method method,
             @AllArguments Object[] args,
             @SuperCall Callable<?> superCall
-        ) throws Exception {
-
+        ) {
             GenerationStrategy strategy = resolveStrategy(method, agent);
             CurrentCall call = CurrentCall.fromMethod(method, args);
-
             try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
                 return executor.submit(() -> {
                     if (agent.runtime().isInGenerationSession()) {
                         return agent.runtime().executeTask(strategy, call);
-                    } else {
-                        return agent.runtime().callPlan(strategy, call);
                     }
+                    return agent.runtime().callPlan(strategy, call);
                 }).get();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new NooaException("Interrupted while invoking " + method.getName(), e);
+            } catch (java.util.concurrent.ExecutionException e) {
+                Throwable cause = e.getCause() != null ? e.getCause() : e;
+                if (cause instanceof RuntimeException runtimeException) {
+                    throw runtimeException;
+                }
+                throw new NooaException("Failed to invoke " + method.getName(), cause);
             }
         }
 
@@ -198,7 +207,7 @@ public final class AgentFactory {
             if (strategyAnn != null) {
                 try {
                     return strategyAnn.value().getDeclaredConstructor().newInstance();
-                } catch (Exception e) {
+                } catch (ReflectiveOperationException e) {
                     log.warn("Failed to instantiate strategy {}: {}",
                         strategyAnn.value().getName(), e.getMessage());
                 }

@@ -67,6 +67,32 @@ public final class CurrentCall {
     public Class<?> returnType() { return returnType; }
     public String docstring() { return docstring; }
 
+    public String userPrompt(boolean includeArgs, int maxArgChars) {
+        StringBuilder builder = new StringBuilder(docstring);
+        if (includeArgs && !namedArgs.isEmpty()) {
+            builder.append(System.lineSeparator())
+                .append(System.lineSeparator())
+                .append("Inputs:");
+            for (var entry : namedArgs.entrySet()) {
+                builder.append(System.lineSeparator())
+                    .append("- ")
+                    .append(entry.getKey())
+                    .append(": ")
+                    .append(renderValue(entry.getValue(), maxArgChars));
+            }
+        }
+        return builder.toString();
+    }
+
+    private static String renderValue(Object value, int maxArgChars) {
+        if (value == null) return "null";
+        String text = String.valueOf(value);
+        if (text.length() > maxArgChars) {
+            text = text.substring(0, Math.max(0, maxArgChars)).trim() + "...";
+        }
+        return text;
+    }
+
     private static String extractDocstring(Method method) {
         // Javadoc is not available at runtime via reflection in standard Java.
         // The AgentFactory captures the method's Javadoc at instrumentation time

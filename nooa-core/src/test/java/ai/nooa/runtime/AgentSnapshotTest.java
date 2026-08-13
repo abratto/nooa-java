@@ -8,7 +8,6 @@ import ai.nooa.llm.UnifiedLLM;
 import org.junit.jupiter.api.*;
 
 import java.nio.file.*;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -43,8 +42,8 @@ class AgentSnapshotTest {
 
         var snap = AgentSnapshot.take(agent);
         assertThat(snap.events()).hasSize(1);
-        assertThat(snap.events().get(0).get("content")).isEqualTo("hello");
-        assertThat(snap.contextBlocks()).containsKey("focus");
+        assertThat(snap.events().getFirst().get("content")).isEqualTo("hello");
+        assertThat(snap.contextBlocks()).containsEntry("focus", "testing");
         assertThat(snap.model()).isEqualTo("fake-model");
         agent.close();
     }

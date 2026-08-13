@@ -1,6 +1,5 @@
 package ai.nooa.llm;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -8,13 +7,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -36,6 +35,20 @@ import org.slf4j.LoggerFactory;
  */
 public class UnifiedLLM {
 
+    private static final String MODEL_FIELD = "model";
+    private static final String MAX_TOKENS_FIELD = "max_tokens";
+    private static final String SYSTEM_ROLE = "system";
+    private static final String CONTENT_FIELD = "content";
+    private static final String USAGE_FIELD = "usage";
+    private static final String MESSAGE_FIELD = "message";
+    private static final String ERROR_FIELD = "error";
+    private static final String TEMPERATURE_FIELD = "temperature";
+    private static final String TOP_P_FIELD = "top_p";
+    private static final String TOOL_CALLS_FIELD = "tool_calls";
+    private static final String ROLE_FIELD = "role";
+    private static final String TOOL_CALL_ID_FIELD = "tool_call_id";
+    private static final String NAME_FIELD = "name";
+    private static final String TYPE_FIELD = "type";
     private static final Logger log = LoggerFactory.getLogger(UnifiedLLM.class);
     private static final ObjectMapper JSON = new ObjectMapper()
         .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
@@ -66,10 +79,6 @@ public class UnifiedLLM {
 
     private UnifiedLLM(String apiKey, String baseUrl, String model, Provider provider) {
         this(apiKey, baseUrl, model, provider, RetryConfig.defaults());
-    }
-
-    private UnifiedLLM(String apiKey, String baseUrl, String model, RetryConfig retryConfig) {
-        this(apiKey, baseUrl, model, Provider.OPENAI, retryConfig);
     }
 
     private UnifiedLLM(String apiKey, String baseUrl, String model, Provider provider, RetryConfig retryConfig) {
@@ -160,6 +169,9 @@ public class UnifiedLLM {
     ) {
         try {
             return doChat(messages, tools, outputModel, samplingParams);
+        } catch (InterruptedException _) {
+            Thread.currentThread().interrupt();
+            throw new LLMException("LLM call interrupted", 0);
         } catch (Exception e) {
             if (e instanceof LLMException le) throw le;
             throw new LLMException("LLM call failed: " + e.getMessage(), 0);
@@ -171,37 +183,49 @@ public class UnifiedLLM {
         List<Tool> tools,
         Class<?> outputModel,
         Map<String, Object> samplingParams
-    ) throws Exception {
+    ) throws IOException, InterruptedException {
         ObjectNode body = JSON.createObjectNode();
-        body.put("model", model);
+        body.put(MODEL_FIELD, model);
+        configureRequestBody(body, messages, tools, outputModel, samplingParams);
 
+        HttpRequest request = buildRequest(body);
+        return executeWithRetry(request);
+    }
+
+    private void configureRequestBody(ObjectNode body,
+        List<Message> messages,
+        List<Tool> tools,
+        Class<?> outputModel,
+        Map<String, Object> samplingParams) {
         if (provider == Provider.ANTHROPIC) {
-            body.put("max_tokens", samplingParams != null && samplingParams.containsKey("max_tokens")
-                ? ((Number) samplingParams.get("max_tokens")).intValue() : 4096);
-            // Anthropic: system is a top-level field, not a message
-            var systemMsg = messages.stream().filter(m -> "system".equals(m.role())).findFirst();
-            systemMsg.ifPresent(m -> body.put("system", m.content()));
+            body.put(MAX_TOKENS_FIELD, samplingParams != null && samplingParams.containsKey(MAX_TOKENS_FIELD)
+                ? ((Number) samplingParams.get(MAX_TOKENS_FIELD)).intValue() : 4096);
+            var systemMsg = messages.stream().filter(m -> SYSTEM_ROLE.equals(m.role())).findFirst();
+            systemMsg.ifPresent(m -> body.put(SYSTEM_ROLE, m.content()));
             body.set("messages", messagesToJsonAnthropic(messages));
             if (tools != null && !tools.isEmpty()) {
                 body.set("tools", JSON.valueToTree(tools));
             }
-        } else {
-            body.set("messages", messagesToJson(messages));
-            if (tools != null && !tools.isEmpty()) {
-                body.set("tools", JSON.valueToTree(tools));
-                body.put("tool_choice", "auto");
-            }
-            if (outputModel != null) {
-                body.set("response_format", buildStructuredOutputSchema(outputModel));
-            }
-            applySamplingParams(body, samplingParams);
+            return;
         }
 
+        body.set("messages", messagesToJson(messages));
+        if (tools != null && !tools.isEmpty()) {
+            body.set("tools", JSON.valueToTree(tools));
+            body.put("tool_choice", "auto");
+        }
+        if (outputModel != null) {
+            body.set("response_format", buildStructuredOutputSchema(outputModel));
+        }
+        applySamplingParams(body, samplingParams);
+    }
+
+    private HttpRequest buildRequest(ObjectNode body) throws JsonProcessingException {
         String endpoint = provider == Provider.ANTHROPIC ? "/messages" : "/chat/completions";
         String authHeader = provider == Provider.ANTHROPIC ? "x-api-key" : "Authorization";
         String authValue = provider == Provider.ANTHROPIC ? apiKey : "Bearer " + apiKey;
 
-        HttpRequest request = HttpRequest.newBuilder()
+        return HttpRequest.newBuilder()
             .uri(URI.create(baseUrl + endpoint))
             .header(authHeader, authValue)
             .header("Content-Type", "application/json")
@@ -209,13 +233,11 @@ public class UnifiedLLM {
             .POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(body)))
             .timeout(Duration.ofMinutes(5))
             .build();
-
-        return executeWithRetry(request);
     }
 
-    private LLMResponse executeWithRetry(HttpRequest request) throws Exception {
+    private LLMResponse executeWithRetry(HttpRequest request) throws IOException, InterruptedException {
         int attempt = 0;
-        Exception lastException = null;
+        LLMException lastException = null;
 
         while (attempt < retryConfig.maxRetries()) {
             attempt++;
@@ -229,7 +251,7 @@ public class UnifiedLLM {
 
                 if (RETRIABLE_STATUSES.contains(response.statusCode())) {
                     JsonNode root = JSON.readTree(response.body());
-                    String error = root.path("error").path("message").asText(
+                    String error = root.path(ERROR_FIELD).path(MESSAGE_FIELD).asText(
                         "HTTP " + response.statusCode());
                     lastException = new LLMException(error, response.statusCode());
 
@@ -246,7 +268,7 @@ public class UnifiedLLM {
                 }
 
                 JsonNode root = JSON.readTree(response.body());
-                String error = root.path("error").path("message").asText(
+                String error = root.path(ERROR_FIELD).path(MESSAGE_FIELD).asText(
                     "HTTP " + response.statusCode());
                 throw new LLMException(error, response.statusCode());
             } catch (LLMException e) {
@@ -264,7 +286,7 @@ public class UnifiedLLM {
         }
 
         throw new LLMException("Max retries exceeded",
-            lastException instanceof LLMException le ? le.statusCode() : 0);
+            lastException != null ? lastException.statusCode() : 0);
     }
 
     private LLMResponse parseResponse(JsonNode root) {
@@ -272,28 +294,28 @@ public class UnifiedLLM {
             return parseAnthropicResponse(root);
         }
         JsonNode choice = root.path("choices").get(0);
-        JsonNode msg = choice.path("message");
+        JsonNode msg = choice.path(MESSAGE_FIELD);
 
-        String content = msg.path("content").asText(null);
-        List<LLMResponse.ToolCall> toolCalls = parseToolCalls(msg.path("tool_calls"));
+        String content = msg.path(CONTENT_FIELD).asText(null);
+        List<LLMResponse.ToolCall> toolCalls = parseToolCalls(msg.path(TOOL_CALLS_FIELD));
         LLMResponse.Usage usage = new LLMResponse.Usage(
-            root.path("usage").path("prompt_tokens").asInt(),
-            root.path("usage").path("completion_tokens").asInt(),
-            root.path("usage").path("total_tokens").asInt()
+            root.path(USAGE_FIELD).path("prompt_tokens").asInt(),
+            root.path(USAGE_FIELD).path("completion_tokens").asInt(),
+            root.path(USAGE_FIELD).path("total_tokens").asInt()
         );
 
         return new LLMResponse(content, toolCalls, usage,
-            root.path("model").asText(), choice.path("finish_reason").asText());
+            root.path(MODEL_FIELD).asText(), choice.path("finish_reason").asText());
     }
 
     private LLMResponse parseAnthropicResponse(JsonNode root) {
         StringBuilder textContent = new StringBuilder();
         List<LLMResponse.ToolCall> toolCalls = new ArrayList<>();
 
-        JsonNode content = root.path("content");
+        JsonNode content = root.path(CONTENT_FIELD);
         if (content.isArray()) {
             for (JsonNode block : content) {
-                String type = block.path("type").asText();
+                String type = block.path(TYPE_FIELD).asText();
                 if ("text".equals(type)) {
                     if (!textContent.isEmpty()) textContent.append("\n");
                     textContent.append(block.path("text").asText());
@@ -301,12 +323,12 @@ public class UnifiedLLM {
                     JsonNode input = block.path("input");
                     Map<String, Object> args = jsonToMap(input.toString());
                     toolCalls.add(new LLMResponse.ToolCall(
-                        block.path("id").asText(), block.path("name").asText(), args));
+                        block.path("id").asText(), block.path(NAME_FIELD).asText(), args));
                 }
             }
         }
 
-        JsonNode usage = root.path("usage");
+        JsonNode usage = root.path(USAGE_FIELD);
         return new LLMResponse(
             !textContent.isEmpty() ? textContent.toString() : null,
             toolCalls,
@@ -314,7 +336,7 @@ public class UnifiedLLM {
                 usage.path("input_tokens").asInt(),
                 usage.path("output_tokens").asInt(),
                 usage.path("input_tokens").asInt() + usage.path("output_tokens").asInt()),
-            root.path("model").asText(),
+            root.path(MODEL_FIELD).asText(),
             root.path("stop_reason").asText()
         );
     }
@@ -340,18 +362,18 @@ public class UnifiedLLM {
         ArrayNode arr = JSON.createArrayNode();
         for (Message m : messages) {
             ObjectNode node = JSON.createObjectNode();
-            node.put("role", m.role());
+            node.put(ROLE_FIELD, m.role());
             if (m.content() != null) {
-                node.put("content", m.content());
+                node.put(CONTENT_FIELD, m.content());
             }
             if (m.toolCallId() != null) {
-                node.put("tool_call_id", m.toolCallId());
+                node.put(TOOL_CALL_ID_FIELD, m.toolCallId());
             }
             if (m.name() != null) {
-                node.put("name", m.name());
+                node.put(NAME_FIELD, m.name());
             }
             if (m.toolCalls() != null) {
-                node.set("tool_calls", JSON.valueToTree(m.toolCalls()));
+                node.set(TOOL_CALLS_FIELD, JSON.valueToTree(m.toolCalls()));
             }
             arr.add(node);
         }
@@ -379,11 +401,11 @@ public class UnifiedLLM {
     private ArrayNode messagesToJsonAnthropic(List<Message> messages) {
         ArrayNode arr = JSON.createArrayNode();
         for (Message m : messages) {
-            if ("system".equals(m.role())) continue; // handled separately
+            if (SYSTEM_ROLE.equals(m.role())) continue; // handled separately
             ObjectNode node = JSON.createObjectNode();
-            node.put("role", m.role());
+            node.put(ROLE_FIELD, m.role());
             if (m.content() != null) {
-                node.put("content", m.content());
+                node.put(CONTENT_FIELD, m.content());
             }
             arr.add(node);
         }
@@ -392,14 +414,14 @@ public class UnifiedLLM {
 
     private void applySamplingParams(ObjectNode body, Map<String, Object> params) {
         if (params == null) { return; }
-        if (params.containsKey("temperature")) {
-            body.put("temperature", ((Number) params.get("temperature")).doubleValue());
+        if (params.containsKey(TEMPERATURE_FIELD)) {
+            body.put(TEMPERATURE_FIELD, ((Number) params.get(TEMPERATURE_FIELD)).doubleValue());
         }
-        if (params.containsKey("max_tokens")) {
-            body.put("max_tokens", ((Number) params.get("max_tokens")).intValue());
+        if (params.containsKey(MAX_TOKENS_FIELD)) {
+            body.put(MAX_TOKENS_FIELD, ((Number) params.get(MAX_TOKENS_FIELD)).intValue());
         }
-        if (params.containsKey("top_p")) {
-            body.put("top_p", ((Number) params.get("top_p")).doubleValue());
+        if (params.containsKey(TOP_P_FIELD)) {
+            body.put(TOP_P_FIELD, ((Number) params.get(TOP_P_FIELD)).doubleValue());
         }
     }
 
