@@ -23,7 +23,7 @@ class StandaloneTest {
 
     @Test
     @DisplayName("call resolves method and invokes strategy")
-    void callResolvesMethod() {
+    void callResolvesMethod() throws Exception {
         var llm = new FakeLLMClient();
         llm.respondWith("Hello, World!");
 
@@ -35,7 +35,7 @@ class StandaloneTest {
 
     @Test
     @DisplayName("@Generate annotation is required")
-    void requiresGenerateAnnotation() {
+    void requiresGenerateAnnotation() throws Exception {
         var llm = new FakeLLMClient();
         // toString on Object has 0 params — will match findMethod but is not @Generate
         assertThatThrownBy(() -> Standalone.call(llm, Object.class, "toString"))

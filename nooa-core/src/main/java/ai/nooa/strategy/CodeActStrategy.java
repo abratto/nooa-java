@@ -46,8 +46,9 @@ public final class CodeActStrategy implements GenerationStrategy {
 
                 List<Message> messages = new ArrayList<>();
                 String systemPrompt = runtime.agent().contextManager().render(runtime.agent());
+                String userPrompt = call.userPrompt(true, 800);
                 messages.add(Message.system(systemPrompt));
-                messages.add(Message.user(call.docstring()));
+                messages.add(Message.user(userPrompt));
                 messages.addAll(runtime.eventManager().toMessages());
 
                 LLMResponse response = runtime.generate(TOOLS, call.returnType(), Map.of());

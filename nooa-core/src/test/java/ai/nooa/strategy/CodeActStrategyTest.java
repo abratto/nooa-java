@@ -58,4 +58,24 @@ class CodeActStrategyTest {
         var result = strategy.execute(agent.runtime(), call);
         assertThat(result).isNotNull();
     }
+
+    @Test
+    @DisplayName("baseline and argument-aware prompts differ in grounding content")
+    void baselineAndArgumentAwarePromptsDifferInGrounding() throws Exception {
+        var article = "Acme announced a new battery chemistry that cuts charging time by 40% and reduces heat.";
+        var call = CurrentCall.fromMethod(
+            TestAgent.class.getDeclaredMethod("generate", String.class),
+            new Object[]{article});
+
+        var baseline = call.docstring();
+        var enriched = call.userPrompt(true, 200);
+
+        assertThat(baseline).contains("generate");
+        assertThat(enriched)
+            .contains("Inputs:")
+            .contains("x")
+            .contains(article.substring(0, 30));
+        assertThat(enriched.length()).isGreaterThan(baseline.length());
+        assertThat(call.userPrompt(false, 200)).isEqualTo(baseline);
+    }
 }
