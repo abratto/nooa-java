@@ -75,9 +75,38 @@ System.out.println(greeting);
 <dependency>
   <groupId>ai.nooa</groupId>
   <artifactId>nooa-core</artifactId>
-  <version>0.1.0</version>
+  <version>0.3.0-SNAPSHOT</version>
 </dependency>
 ```
+
+### Using the SDK in another Java project
+
+The SDK is intended to be consumed like any other Maven library artifact. The
+source of truth is this repository, and the published library coordinates are the
+core artifact from this build:
+
+```xml
+<dependency>
+  <groupId>ai.nooa</groupId>
+  <artifactId>nooa-core</artifactId>
+  <version>0.3.0-SNAPSHOT</version>
+</dependency>
+```
+
+For local development, install the project into your local Maven repository:
+
+```bash
+mvn install
+```
+
+For shared usage, publish the artifact to your organization’s Maven repository,
+GitHub Packages, Maven Central, or an internal repository manager, then depend on
+that released version in downstream projects.
+
+The repository therefore serves a dual role:
+
+- it is the source for the framework implementation
+- it is the maintenance home for the SDK artifact versioning and compatibility
 
 ## Architecture
 
