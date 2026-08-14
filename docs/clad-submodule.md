@@ -19,6 +19,27 @@ The Java SDK here and the CLAD repos serve related but distinct purposes:
 
 This split keeps the framework general-purpose while making the CLAD-specific workflow a distinct application and implementation concern.
 
+## SDK maintenance and consumption model
+
+This repository is the maintenance home for the Java SDK itself. It contains the
+source for the framework runtime, agent primitives, LLM integrations, and the
+Maven module structure used to build the library.
+
+The maintenance contract is:
+
+- the SDK source lives here
+- versioning and framework compatibility are managed here
+- downstream Java projects consume the library through Maven coordinates from this repo
+- CLAD-specific process guidance and implementation remain in the CLAD repos
+
+For external consumers, the expected flow is:
+
+1. build and publish the SDK artifacts from this repo
+2. declare the library as a normal Maven dependency in downstream projects
+3. keep the CLAD methodology and concrete CLAD agent separate from the generic SDK lifecycle
+
+This avoids conflating a reusable framework library with a single application workflow.
+
 ## Practical guidance
 
 - Keep Java SDK and framework work in this repository.

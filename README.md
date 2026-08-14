@@ -32,6 +32,23 @@ distinct implementation and product concern.
 For the CLAD methodology, see the CLAD repository.
 For the realized CLAD agent, see the CLAD agent repository.
 
+## SDK maintenance contract
+
+This repository is the canonical source for the Java SDK itself. The SDK is built
+from the modules in this repo and shipped as Maven artifacts. In other words,
+this is the place where framework API evolution, runtime behavior, compatibility,
+and core library maintenance happen.
+
+The intended model is:
+
+- maintain the generic Java SDK here
+- keep CLAD methodology and policy logic in the CLAD repo
+- keep CLAD-specific agent behavior in the separate CLAD agent repo
+- publish the SDK artifacts from this repo as the reusable dependency for other Java projects
+
+This repo should therefore be treated as the maintenance home for the framework
+source code, even when CLAD-specific implementations live elsewhere.
+
 ## Quick Start
 
 ```java
