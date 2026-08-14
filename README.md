@@ -49,6 +49,8 @@ The intended model is:
 This repo should therefore be treated as the maintenance home for the framework
 source code, even when CLAD-specific implementations live elsewhere.
 
+For the formal SDK release and compatibility policy, see [docs/sdk-versioning.md](docs/sdk-versioning.md).
+
 ## Quick Start
 
 ```java
