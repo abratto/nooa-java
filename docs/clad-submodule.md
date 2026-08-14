@@ -1,50 +1,29 @@
-# CLAD submodule and repository boundaries
+# CLAD repository boundaries
 
-This repository contains the Java SDK for NOOA, while the CLAD methodology and agent tooling live in a separate repository that is linked here as a Git submodule.
+This repository contains the Java SDK for NOOA. The CLAD process and methodology live in a separate repository, and the concrete CLAD agent runtime lives in a dedicated agent repo.
 
 ## What this means
 
 - The root repository is the Java implementation of the NOOA SDK.
-- The [clad](../clad) directory is a separate Git repository checked out inside this repository.
-- The parent repository tracks the submodule by commit ID, not by copying the CLAD files directly.
-- The CLAD repository can evolve independently, and this repository can choose when to pull a newer CLAD commit.
+- The CLAD methodology repo is the source of truth for process, artefact rules, and stage semantics.
+- The CLAD agent repo is the concrete runtime realization of that methodology using the NOOA SDK.
+- The SDK repo intentionally does not own the CLAD process or its agent implementation as a built-in component.
 
-This keeps the Java SDK and the CLAD methodology in sync without forcing all CLAD changes to be merged into the Java SDK as one monorepo.
+## Why this is structured this way
 
-## Why it is structured this way
+The Java SDK here and the CLAD repos serve related but distinct purposes:
 
-The Java SDK here and the CLAD repo serve related but distinct purposes:
+- The Java SDK provides runtime APIs, libraries, and agent-building blocks for Java users.
+- The CLAD repo provides the methodology, workflows, and review discipline.
+- The CLAD agent repo provides the concrete agent implementation of that methodology.
 
-- The Java SDK provides runtime APIs, libraries, and agent implementations for Java users.
-- The CLAD repo provides the methodology, workflow scaffolding, quality gates, and agent-oriented development process.
-
-When the CLAD repo improves, this repository can adopt those upstream changes intentionally by updating the submodule pointer.
-
-## Normal workflow
-
-From the root of this repository:
-
-```bash
-git submodule update --remote clad
-```
-
-This updates the checked-out CLAD submodule to the latest commit from its configured remote. After that, you can review the change and commit the updated submodule pointer in the parent repo:
-
-```bash
-git add clad
-git commit -m "Update CLAD submodule to latest"
-```
-
-## Important rule
-
-A dirty or changed submodule should be treated as a separate repository state. Do not assume that editing the submodule is a normal file edit in the root repo.
-
-If the submodule is modified, the parent repository will report it as a different Git state until the submodule pointer is intentionally updated and committed.
+This split keeps the framework general-purpose while making the CLAD-specific workflow a distinct application and implementation concern.
 
 ## Practical guidance
 
-- Keep the Java SDK upgrade work in the root repository.
-- Treat the CLAD submodule as an independent repo with its own changes and version history.
-- Only update the submodule when you intentionally want the parent repo to track a newer CLAD revision.
+- Keep Java SDK and framework work in this repository.
+- Treat the CLAD methodology repo as the authoritative home for CLAD semantics.
+- Treat the CLAD agent repo as the realization of CLAD using the SDK.
+- Do not treat the SDK repo as the master home for CLAD process or tooling.
 
-This repo is intentionally split so that methodology and implementation can evolve at different rates while still being linked together when needed.
+This repository is intentionally split so that the framework, methodology, and implementation can evolve independently while remaining clearly connected.
