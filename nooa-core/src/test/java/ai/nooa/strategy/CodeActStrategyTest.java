@@ -60,6 +60,21 @@ class CodeActStrategyTest {
     }
 
     @Test
+    @DisplayName("returns text fallback when the model responds without tool calls")
+    void returnsTextFallbackWhenNoToolCallIsIssued() throws Exception {
+        llm.respondWith("Hello from a text-only model");
+        var strategy = new CodeActStrategy(
+            ai.nooa.config.CodeActConfig.builder().allowTextFallback(true).build());
+        var call = CurrentCall.fromMethod(
+            TestAgent.class.getDeclaredMethod("generate", String.class),
+            new Object[]{"test"});
+
+        var result = strategy.execute(agent.runtime(), call);
+
+        assertThat(result).isEqualTo("Hello from a text-only model");
+    }
+
+    @Test
     @DisplayName("baseline and argument-aware prompts differ in grounding content")
     void baselineAndArgumentAwarePromptsDifferInGrounding() throws Exception {
         var article = "Acme announced a new battery chemistry that cuts charging time by 40% and reduces heat.";

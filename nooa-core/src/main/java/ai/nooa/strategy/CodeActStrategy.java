@@ -72,6 +72,11 @@ public final class CodeActStrategy implements GenerationStrategy {
                     }
                     runtime.eventManager().add(new Event.AfterTurn(iteration, false, true, null));
                 } else {
+                    String content = response.content() != null ? response.content().trim() : "";
+                    if (config.allowTextFallback() && !content.isEmpty()) {
+                        runtime.eventManager().add(new Event.AfterTurn(iteration, false, true, null));
+                        return content;
+                    }
                     textOnlyCount++;
                     if (textOnlyCount >= config.maxConsecutiveTextOnly()) {
                         throw new GenerationError("Too many text-only responses (" + textOnlyCount + ")");

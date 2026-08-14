@@ -7,10 +7,15 @@ public record CodeActConfig(
     int maxIterations,
     int maxRetries,
     int maxConsecutiveTextOnly,
-    long cellTimeoutMillis
+    long cellTimeoutMillis,
+    boolean allowTextFallback
 ) {
+    public CodeActConfig(int maxIterations, int maxRetries, int maxConsecutiveTextOnly, long cellTimeoutMillis) {
+        this(maxIterations, maxRetries, maxConsecutiveTextOnly, cellTimeoutMillis, true);
+    }
+
     public static CodeActConfig defaults() {
-        return new CodeActConfig(50, 3, 3, 90_000);
+        return new CodeActConfig(50, 3, 3, 90_000, true);
     }
 
     public static Builder builder() { return new Builder(); }
@@ -20,14 +25,16 @@ public record CodeActConfig(
         private int maxRetries = 3;
         private int maxConsecutiveTextOnly = 3;
         private long cellTimeoutMillis = 90_000;
+        private boolean allowTextFallback = true;
 
         public Builder maxIterations(int v) { this.maxIterations = v; return this; }
         public Builder maxRetries(int v) { this.maxRetries = v; return this; }
         public Builder maxConsecutiveTextOnly(int v) { this.maxConsecutiveTextOnly = v; return this; }
         public Builder cellTimeoutMillis(long v) { this.cellTimeoutMillis = v; return this; }
+        public Builder allowTextFallback(boolean v) { this.allowTextFallback = v; return this; }
 
         public CodeActConfig build() {
-            return new CodeActConfig(maxIterations, maxRetries, maxConsecutiveTextOnly, cellTimeoutMillis);
+            return new CodeActConfig(maxIterations, maxRetries, maxConsecutiveTextOnly, cellTimeoutMillis, allowTextFallback);
         }
     }
 }

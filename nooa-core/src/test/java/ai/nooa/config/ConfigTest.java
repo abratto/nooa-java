@@ -50,6 +50,7 @@ class ConfigTest {
         assertThat(config.maxIterations()).isEqualTo(50);
         assertThat(config.maxRetries()).isEqualTo(3);
         assertThat(config.cellTimeoutMillis()).isEqualTo(90_000);
+        assertThat(config.allowTextFallback()).isTrue();
     }
 
     @Test
@@ -59,11 +60,13 @@ class ConfigTest {
             .maxIterations(10)
             .maxRetries(5)
             .cellTimeoutMillis(30_000)
+            .allowTextFallback(false)
             .build();
 
         assertThat(config.maxIterations()).isEqualTo(10);
         assertThat(config.maxRetries()).isEqualTo(5);
         assertThat(config.cellTimeoutMillis()).isEqualTo(30_000);
+        assertThat(config.allowTextFallback()).isFalse();
     }
 
     @Test
