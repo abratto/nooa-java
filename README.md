@@ -239,6 +239,77 @@ small capabilities and orchestrate them in Java.
 This keeps the LLM focused on the tasks it is good at while leaving the rest to
 Java.
 
+### Structured output, without hard-coding a provider
+
+A common pattern in agent systems is to ask the model for JSON and then parse it
+into a Java record. NOOA supports that directly through the provider layer, so the
+same logic works with OpenAI-compatible endpoints, local Ollama, and other
+backends behind the same abstraction.
+
+```java
+record NewsBrief(String headline, String impact, String summary) {}
+
+class NewsAgent extends Agent {
+    public NewsAgent(UnifiedLLM llm) { super(llm); }
+
+    @Generate @Strategy(PredictStrategy.class)
+    public NewsBrief extractBrief(String article) {
+        throw new UnsupportedOperationException("Generated at runtime");
+    }
+}
+```
+
+The framework makes this easy because the model call is mediated by `UnifiedLLM`,
+while your Java type becomes the contract. If a model returns invalid or partial
+JSON, you can validate it in Java and retry with a stricter prompt instead of
+accepting bad output silently.
+
+```java
+var helper = new StructuredOutputHelper(3);
+var brief = helper.extract(
+    List.of(Message.user("Summarize the article and return JSON.")),
+    NewsBrief.class,
+    llm,
+    Map.of("temperature", 0.2)
+);
+```
+
+This keeps the pattern provider-agnostic: the agent code does not know whether the
+underlying model is local or remote.
+
+### Simple example: a periodic news agent
+
+A basic pattern is: Java fetches or prepares the input, the model turns it into a
+structured result, and the agent loops on a schedule.
+
+```java
+class PeriodicNewsAgent extends Agent {
+    public PeriodicNewsAgent(UnifiedLLM llm) { super(llm); }
+
+    String fetchLatestNews() {
+        return "Acme unveiled a battery chemistry that cuts charge time by 40%.";
+    }
+
+    @Generate @Strategy(PredictStrategy.class)
+    public NewsBrief summarize(String article) {
+        throw new UnsupportedOperationException("Generated at runtime");
+    }
+
+    public void pollOnce() {
+        var article = fetchLatestNews();
+        var brief = summarize(article);
+        System.out.println(brief.summary());
+    }
+}
+```
+
+This is the same mental model used throughout NOOA:
+
+- Java owns the orchestration and state
+- helper methods provide deterministic facts and tools
+- `@Generate` methods perform the model-powered reasoning step
+- strategies decide how that result is produced and validated
+
 ## Example: business workflow as a state machine
 
 Many agent systems are described as graphs or state machines, and that mental model

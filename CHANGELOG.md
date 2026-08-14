@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.3.0 (2026-08-14)
+
+### Added
+- Provider-agnostic `StructuredOutputHelper` for validating typed JSON responses before returning them to callers
+- `FakeLLMClient` test harness for isolated structured-output verification without external API keys
+- Example agents split into dedicated source files and updated to use env-aware `ExampleLLM` provider selection
+
+### Changed
+- Improved local-model compatibility by allowing text fallback in `CodeActStrategy` when a model returns plain text instead of tool calls
+- Standardized example setup to prefer `NOOA_*` environment variables with OpenAI-compatible local endpoints and Ollama fallback
+- Tightened example prompts to produce more reliable, constrained structured outputs
+
+### Fixed
+- Fixed Java access issues for generated subclasses returning record-based outputs
+- Resolved example-only compilation drift caused by nested record declarations and source layout changes
+
 ## v0.2.0 (2026-08-12)
 
 ### Changed
