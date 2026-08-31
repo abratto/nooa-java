@@ -19,7 +19,15 @@ public interface RuntimeServices {
 
     LLMResponse generate(List<Tool> tools, Class<?> outputModel, Map<String, Object> samplingParams);
 
+    default LLMResponse generate(List<Tool> tools, Class<?> outputModel, Map<String, Object> samplingParams, String systemPromptSupplement) {
+        return generate(tools, outputModel, samplingParams);
+    }
+
     ExecutionResult executeCode(String code, Map<String, Object> builtins);
+
+    default void bindVariable(String name, String typeName, Object value) {
+        // Optional hook; ActorRuntime binds method arguments into the sandbox.
+    }
 
     Object executeNested(GenerationStrategy strategy, CurrentCall call);
 

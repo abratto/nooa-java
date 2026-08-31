@@ -60,6 +60,7 @@ public abstract class Agent implements AutoCloseable {
     @Hidden private final EventsApi eventsApi;
     @Hidden private Permissions permissions = new Permissions();
     @Hidden private PermissionCallback permissionCallback;
+    @Hidden private final Map<String, Object> samplingOverrides = new java.util.concurrent.ConcurrentHashMap<>();
 
     protected Agent(UnifiedLLM llm) {
         this(llm, AgentConfig.defaults());
@@ -85,10 +86,10 @@ public abstract class Agent implements AutoCloseable {
                 ContextBlock.dynamicBlock("system_prompt", "self.resolveSystemPrompt()")));
         cm.registerProtected("self",
             ContextBlock.Dynamic.class.cast(
-                ContextBlock.dynamicBlock("self", "AgentDoc.of(type(self))")));
+                ContextBlock.dynamicBlock("self", "ai.nooa.agentdoc.AgentDoc.of(type(self))")));
         cm.registerProtected("state",
             ContextBlock.Dynamic.class.cast(
-                ContextBlock.dynamicBlock("state", "AgentDoc.instanceValues(self)")));
+                ContextBlock.dynamicBlock("state", "ai.nooa.agentdoc.AgentDoc.instanceValues(self)")));
     }
 
     // ---- Public accessors (hidden from LLM by default) ----
@@ -112,14 +113,38 @@ public abstract class Agent implements AutoCloseable {
     }
     public PermissionCallback permissionCallback() { return permissionCallback; }
 
+    /**
+     * Per-call sampling overrides that strategies merge into the LLM request.
+     * Agents use this to set model-specific sampling fields (e.g.
+     * {@code reasoning_effort}) per stage or per turn without leaking them into
+     * the prompt. Values are merged on top of strategy defaults.
+     */
+    @Hidden public Map<String, Object> samplingOverrides() { return samplingOverrides; }
+    @Hidden public void samplingOverride(String key, Object value) {
+        if (value == null) {
+            samplingOverrides.remove(key);
+        } else {
+            samplingOverrides.put(key, value);
+        }
+    }
+
     @Hidden
     public String resolveSystemPrompt() {
-        var cls = getClass();
-        SystemPrompt ann = cls.getAnnotation(SystemPrompt.class);
+        SystemPrompt ann = findSystemPrompt(getClass());
         if (ann != null) {
-            return runtime.evaluateExpression(ann.value());
+            return runtime.expandVariables(ann.value());
         }
-        return cls.getSimpleName();
+        return getClass().getSimpleName();
+    }
+
+    private static SystemPrompt findSystemPrompt(Class<?> cls) {
+        for (Class<?> c = cls; c != null && c != Object.class; c = c.getSuperclass()) {
+            SystemPrompt ann = c.getAnnotation(SystemPrompt.class);
+            if (ann != null) {
+                return ann;
+            }
+        }
+        return null;
     }
 
     @Override

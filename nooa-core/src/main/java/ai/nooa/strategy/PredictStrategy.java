@@ -31,7 +31,7 @@ public final class PredictStrategy implements GenerationStrategy {
                 messages.add(Message.user(call.docstring()));
 
                 LLMResponse response = runtime.generate(
-                    List.of(), call.returnType(), buildSamplingParams());
+                    List.of(), call.returnType(), buildSamplingParams(runtime));
 
                 String content = response.content();
                 if (content != null && !content.isBlank()) {
@@ -50,21 +50,88 @@ public final class PredictStrategy implements GenerationStrategy {
             + runtime.agent().contextManager().render(runtime.agent());
     }
 
-    private Map<String, Object> buildSamplingParams() {
+    private Map<String, Object> buildSamplingParams(RuntimeServices runtime) {
         Map<String, Object> params = new java.util.HashMap<>();
-        if (config.temperature() != null) params.put("temperature", config.temperature().doubleValue());
-        if (config.maxTokens() != null) params.put("max_tokens", config.maxTokens());
+        // Per-agent overrides (e.g. per-stage reasoning_effort) win over defaults.
+        params.putAll(runtime.agent().samplingOverrides());
+
+        if (config.temperature() != null) {
+            params.putIfAbsent("temperature", config.temperature().doubleValue());
+        }
+        if (config.maxTokens() != null) {
+            params.putIfAbsent("max_tokens", config.maxTokens());
+        } else {
+            String raw = System.getProperty("nooa.predict.maxTokens");
+            if (raw != null) {
+                try {
+                    params.putIfAbsent("max_tokens", Integer.parseInt(raw.trim()));
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        if (config.reasoningEffort() != null && !config.reasoningEffort().isBlank()) {
+            params.putIfAbsent("reasoning_effort", config.reasoningEffort());
+        } else {
+            String raw = System.getProperty("nooa.predict.reasoningEffort");
+            if (raw != null && !raw.isBlank()) {
+                params.putIfAbsent("reasoning_effort", raw.trim());
+            }
+        }
         return params;
     }
 
     private Object parseResponse(String content, Class<?> returnType) throws Exception {
         var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-        String json = content.strip();
-        if (json.startsWith("```")) {
-            int start = json.indexOf('\n') + 1;
-            int end = json.lastIndexOf("```");
-            if (end > start) json = json.substring(start, end).strip();
+        return mapper.readValue(extractJson(content), returnType);
+    }
+
+    private String extractJson(String content) {
+        if (content == null) {
+            return "";
         }
-        return mapper.readValue(json, returnType);
+        String text = content.strip();
+
+        if (text.startsWith("```")) {
+            int nl = text.indexOf('\n');
+            if (nl >= 0) {
+                text = text.substring(nl + 1);
+            }
+            int fence = text.lastIndexOf("```");
+            if (fence >= 0) {
+                text = text.substring(0, fence);
+            }
+            text = text.strip();
+        }
+
+        if (text.startsWith("{") || text.startsWith("[")) {
+            return text;
+        }
+
+        if (text.length() >= 2 && text.charAt(0) == '"' && text.charAt(text.length() - 1) == '"') {
+            String inner = text.substring(1, text.length() - 1)
+                .replace("\\\"", "\"")
+                .replace("\\\\", "\\");
+            if (inner.startsWith("{") || inner.startsWith("[")) {
+                return inner;
+            }
+        }
+
+        int start = text.indexOf('{');
+        if (start < 0) {
+            return text;
+        }
+        int depth = 0;
+        for (int i = start; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '{') {
+                depth++;
+            } else if (c == '}') {
+                depth--;
+                if (depth == 0) {
+                    return text.substring(start, i + 1);
+                }
+            }
+        }
+        return text.substring(start);
     }
 }

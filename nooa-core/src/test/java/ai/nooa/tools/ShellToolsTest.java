@@ -71,4 +71,23 @@ class ShellToolsTest {
         String content = shell.read("../../etc/passwd");
         assertThat(content).contains("ERROR");
     }
+
+    @Test
+    @DisplayName("run kills a hanging command at the timeout")
+    void runTimesOutOnHangingCommand() {
+        var result = shell.run("sleep 100", 2);
+        assertThat(result.exitCode()).isEqualTo(-1);
+        assertThat(result.stderr()).contains("KILLED");
+    }
+
+    @Test
+    @DisplayName("run does not hang when a background child inherits stdout")
+    void runDoesNotHangWhenChildHoldsOutputFd() {
+        // `sleep 60 &` inherits the stdout fd; the parent bash exits immediately.
+        // The old pipe-based capture would block on readAllBytes() until the
+        // child died. File redirect must return as soon as the parent exits.
+        var result = shell.run("sleep 60 & echo done", 10);
+        assertThat(result.stdout()).contains("done");
+        assertThat(result.exitCode()).isEqualTo(0);
+    }
 }

@@ -12,7 +12,8 @@ public sealed interface Event
            Event.BeforeTurn, Event.AfterTurn,
            Event.BeforeAgentCall, Event.AfterAgentCall,
            Event.LLMCallStart, Event.LLMCallEnd,
-           Event.Feedback, Event.Summary, Event.LLMComplete {
+           Event.Feedback, Event.Summary, Event.LLMComplete,
+           Event.PromptBuilt {
 
     UUID id();
     Instant timestamp();
@@ -35,6 +36,7 @@ public sealed interface Event
             case Feedback f -> "user";
             case Summary s -> "assistant";
             case LLMComplete lc -> "system";
+            case PromptBuilt pb -> "system";
         };
     }
 
@@ -140,6 +142,27 @@ public sealed interface Event
                        implements Event {
         public LLMComplete(String modelName, int promptTokens, int completionTokens, int totalTokens) {
             this(UUID.randomUUID(), Instant.now(), modelName, promptTokens, completionTokens, totalTokens);
+        }
+    }
+
+    record PromptBuilt(UUID id, Instant timestamp, String modelName,
+                       java.util.List<ai.nooa.llm.Message> messages,
+                       java.util.List<String> toolNames,
+                       String outputModel,
+                       java.util.Map<String, Object> samplingParams,
+                       boolean redacted) implements Event {
+        public PromptBuilt(String modelName,
+                           java.util.List<ai.nooa.llm.Message> messages,
+                           java.util.List<String> toolNames,
+                           String outputModel,
+                           java.util.Map<String, Object> samplingParams,
+                           boolean redacted) {
+            this(UUID.randomUUID(), Instant.now(), modelName,
+                messages != null ? java.util.List.copyOf(messages) : java.util.List.of(),
+                toolNames != null ? java.util.List.copyOf(toolNames) : java.util.List.of(),
+                outputModel,
+                samplingParams != null ? java.util.Map.copyOf(samplingParams) : java.util.Map.of(),
+                redacted);
         }
     }
 }

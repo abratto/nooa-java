@@ -69,6 +69,13 @@ public final class AtifExporter implements AutoCloseable {
                 if (eo.stdout() != null) step.put("stdout", eo.stdout());
                 if (eo.error() != null) step.put("error", eo.error());
             }
+            case Event.PromptBuilt pb -> {
+                step.put("model", pb.modelName());
+                step.put("prompt_redacted", pb.redacted());
+                step.put("message_count", pb.messages().size());
+                step.put("tool_names", pb.toolNames().toString());
+                step.put("messages", pb.messages().toString());
+            }
             default -> {}
         }
         steps.add(step);

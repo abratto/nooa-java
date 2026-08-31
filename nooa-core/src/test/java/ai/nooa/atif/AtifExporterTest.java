@@ -4,6 +4,7 @@ import ai.nooa.Agent;
 import ai.nooa.annotations.Generate;
 import ai.nooa.context.Event;
 import ai.nooa.llm.FakeLLMClient;
+import ai.nooa.llm.Message;
 import ai.nooa.llm.UnifiedLLM;
 import org.junit.jupiter.api.*;
 
@@ -42,6 +43,13 @@ class AtifExporterTest {
 
         agent.eventManager().add(new Event.Task("test task"));
         agent.eventManager().add(new Event.LLMOutput("response"));
+        agent.eventManager().add(new Event.PromptBuilt(
+            "fake-model",
+            java.util.List.of(Message.system("system prompt")),
+            java.util.List.of("executeJava"),
+            null,
+            java.util.Map.of(),
+            true));
 
         atif.close();
 
@@ -56,7 +64,9 @@ class AtifExporterTest {
             assertThat(content).contains("trajectory_id")
                 .contains("steps")
                 .contains("test task")
-                .contains("response");
+                .contains("response")
+                .contains("PromptBuilt")
+                .contains("executeJava");
         }
     }
 

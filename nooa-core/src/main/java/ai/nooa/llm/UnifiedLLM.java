@@ -44,6 +44,8 @@ public class UnifiedLLM {
     private static final String ERROR_FIELD = "error";
     private static final String TEMPERATURE_FIELD = "temperature";
     private static final String TOP_P_FIELD = "top_p";
+    private static final String REASONING_EFFORT_FIELD = "reasoning_effort";
+    private static final String THINK_FIELD = "think";
     private static final String TOOL_CALLS_FIELD = "tool_calls";
     private static final String ROLE_FIELD = "role";
     private static final String TOOL_CALL_ID_FIELD = "tool_call_id";
@@ -383,17 +385,20 @@ public class UnifiedLLM {
     @SuppressWarnings("deprecation")
     private ObjectNode buildStructuredOutputSchema(Class<?> outputModel) {
         ObjectNode schema = JSON.createObjectNode();
-        schema.put("type", "json_schema");
-        ObjectNode jsonSchema = schema.putObject("json_schema");
-        jsonSchema.put("name", outputModel.getSimpleName());
-        jsonSchema.put("strict", true);
-
-        try {
-            var schemaGen = JSON.generateJsonSchema(outputModel);
-            jsonSchema.set("schema", JSON.valueToTree(schemaGen));
-        } catch (JsonProcessingException e) {
-            log.warn("Could not generate JSON schema for {}", outputModel.getName(), e);
-            jsonSchema.put("schema", "{}");
+        if ("json_schema".equals(System.getProperty("nooa.structured.format"))) {
+            schema.put("type", "json_schema");
+            ObjectNode jsonSchema = schema.putObject("json_schema");
+            jsonSchema.put("name", outputModel.getSimpleName());
+            jsonSchema.put("strict", true);
+            try {
+                var schemaGen = JSON.generateJsonSchema(outputModel);
+                jsonSchema.set("schema", JSON.valueToTree(schemaGen));
+            } catch (JsonProcessingException e) {
+                log.warn("Could not generate JSON schema for {}", outputModel.getName(), e);
+                jsonSchema.put("schema", "{}");
+            }
+        } else {
+            schema.put("type", "json_object");
         }
         return schema;
     }
@@ -422,6 +427,17 @@ public class UnifiedLLM {
         }
         if (params.containsKey(TOP_P_FIELD)) {
             body.put(TOP_P_FIELD, ((Number) params.get(TOP_P_FIELD)).doubleValue());
+        }
+        if (params.containsKey(REASONING_EFFORT_FIELD) && params.get(REASONING_EFFORT_FIELD) != null) {
+            body.put(REASONING_EFFORT_FIELD, String.valueOf(params.get(REASONING_EFFORT_FIELD)));
+        }
+        if (params.containsKey(THINK_FIELD) && params.get(THINK_FIELD) != null) {
+            Object think = params.get(THINK_FIELD);
+            if (think instanceof Boolean b) {
+                body.put(THINK_FIELD, b);
+            } else {
+                body.put(THINK_FIELD, String.valueOf(think));
+            }
         }
     }
 

@@ -112,6 +112,43 @@ The repository therefore serves a dual role:
 
 ## Architecture
 
+## Prompt inspection hook
+
+NOOA can now emit the exact outbound prompt bundle before each LLM call so you can inspect and tune prompts.
+
+Enable prompt capture:
+
+```bash
+export NOOA_LOG_PROMPTS=true
+```
+
+Optional raw mode (default is redacted):
+
+```bash
+export NOOA_LOG_PROMPTS_RAW=true
+```
+
+Behavior:
+
+- When enabled, runtime emits a PromptBuilt event containing model name, full message list, tool names, output model, and sampling params.
+- By default PromptBuilt content is redacted for common secret patterns (api keys, tokens, bearer credentials).
+- Raw mode disables redaction and should only be used in trusted local/debug environments.
+
+Where to inspect:
+
+- In-process: subscribe to agent.eventManager().onEvent(...) and filter PromptBuilt events.
+- JSONL recorder: attach a PromptRecorder to stream PromptBuilt events to a file for tuning runs.
+- Snapshot path: PromptBuilt is included in AgentSnapshot save/load.
+- ATIF path: PromptBuilt is exported by AtifExporter for trajectory analysis.
+
+Stream prompts to a JSONL file (one event per line) for offline tuning analysis:
+
+```java
+var recorder = PromptRecorder.attach(agent, Path.of("prompts.jsonl"));
+// ... agent work happens ...
+recorder.close(); // writes are appended eagerly, so partial runs remain inspectable
+```
+
 ```mermaid
 sequenceDiagram
     participant User

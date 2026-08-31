@@ -7,6 +7,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import ai.nooa.Agent;
 import ai.nooa.context.ContextBlock;
 import ai.nooa.context.Event;
+import ai.nooa.llm.Message;
 import ai.nooa.llm.LLMResponse;
 
 import java.nio.file.*;
@@ -131,6 +132,24 @@ public final class AgentSnapshot {
             }
             case Event.ErrorEvent ee -> map.put("message", ee.message());
             case Event.Feedback f -> map.put("content", f.content());
+            case Event.PromptBuilt pb -> {
+                map.put("modelName", pb.modelName());
+                map.put("toolNames", pb.toolNames());
+                map.put("outputModel", pb.outputModel());
+                map.put("samplingParams", pb.samplingParams());
+                map.put("redacted", pb.redacted());
+                List<Map<String, Object>> messageList = new ArrayList<>();
+                for (Message m : pb.messages()) {
+                    Map<String, Object> messageMap = new LinkedHashMap<>();
+                    messageMap.put("role", m.role());
+                    messageMap.put("content", m.content());
+                    messageMap.put("toolCalls", m.toolCalls());
+                    messageMap.put("toolCallId", m.toolCallId());
+                    messageMap.put("name", m.name());
+                    messageList.add(messageMap);
+                }
+                map.put("messages", messageList);
+            }
             default -> {}
         }
         return map;
@@ -166,6 +185,35 @@ public final class AgentSnapshot {
                 (String) map.get("message"));
             case "Feedback" -> new Event.Feedback(uuid, timestamp,
                 (String) map.get("content"));
+            case "PromptBuilt" -> {
+                List<Message> messages = new ArrayList<>();
+                if (map.containsKey("messages")) {
+                    for (var messageMap : (List<Map<String, Object>>) map.get("messages")) {
+                        messages.add(new Message(
+                            (String) messageMap.get("role"),
+                            (String) messageMap.get("content"),
+                            (Map<String, Object>) messageMap.get("toolCalls"),
+                            (String) messageMap.get("toolCallId"),
+                            (String) messageMap.get("name")));
+                    }
+                }
+                List<String> toolNames = map.containsKey("toolNames")
+                    ? (List<String>) map.get("toolNames")
+                    : List.of();
+                String outputModel = (String) map.get("outputModel");
+                Map<String, Object> samplingParams = map.containsKey("samplingParams")
+                    ? (Map<String, Object>) map.get("samplingParams")
+                    : Map.of();
+                boolean redacted = map.containsKey("redacted")
+                    && Boolean.TRUE.equals(map.get("redacted"));
+                yield new Event.PromptBuilt(uuid, timestamp,
+                    (String) map.get("modelName"),
+                    messages,
+                    toolNames,
+                    outputModel,
+                    samplingParams,
+                    redacted);
+            }
             default -> null;
         };
     }

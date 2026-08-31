@@ -4,6 +4,7 @@ import ai.nooa.Agent;
 import ai.nooa.annotations.Generate;
 import ai.nooa.context.Event;
 import ai.nooa.llm.FakeLLMClient;
+import ai.nooa.llm.Message;
 import ai.nooa.llm.UnifiedLLM;
 import org.junit.jupiter.api.*;
 
@@ -55,12 +56,19 @@ class AgentSnapshotTest {
         var agent = new TestAgent(llm);
         agent.eventManager().add(new Event.Task("test"));
         agent.eventManager().add(new Event.LLMOutput("result"));
+        agent.eventManager().add(new Event.PromptBuilt(
+            "fake-model",
+            java.util.List.of(Message.system("api_key=secret")),
+            java.util.List.of("executeJava"),
+            null,
+            java.util.Map.of("temperature", 0.2),
+            true));
 
         var snap = AgentSnapshot.take(agent);
         AgentSnapshot.save(snap, tempFile);
 
         var loaded = AgentSnapshot.load(tempFile);
-        assertThat(loaded.events()).hasSize(2);
+        assertThat(loaded.events()).hasSize(3);
         assertThat(loaded.agentId()).isEqualTo(agent.agentId());
         agent.close();
     }

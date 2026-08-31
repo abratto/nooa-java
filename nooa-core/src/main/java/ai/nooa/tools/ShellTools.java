@@ -68,27 +68,76 @@ public final class ShellTools implements AutoCloseable {
                 return new ShellResult("", "User denied: " + command, -1);
             }
         }
+
+        Path outFile = null;
+        Path errFile = null;
         try {
+            // Redirect output to files rather than pipes. A child process (e.g. a
+            // surefire fork spawned by `mvn`) can inherit the pipe fd and keep it
+            // open after the parent exits, making readAllBytes() block forever.
+            // Files cannot block the reader the same way.
+            outFile = Files.createTempFile("nooa-shell-out", ".log");
+            errFile = Files.createTempFile("nooa-shell-err", ".log");
+
             var pb = new ProcessBuilder("/bin/bash", "-c", command)
                 .directory(workspace.toFile())
-                .redirectErrorStream(false);
+                .redirectOutput(outFile.toFile())
+                .redirectError(errFile.toFile());
 
             currentProcess = pb.start();
-            var stdout = new String(currentProcess.getInputStream().readAllBytes());
-            var stderr = new String(currentProcess.getErrorStream().readAllBytes());
-            boolean finished = currentProcess.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+            Process proc = currentProcess;
 
-            if (!finished) {
-                currentProcess.destroyForcibly();
-                return new ShellResult(stdout, stderr + "\n[KILLED: timeout]", -1);
+            boolean finished;
+            try {
+                finished = proc.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                killTree(proc);
+                return new ShellResult("", "Interrupted", -1);
             }
 
-            int exitCode = currentProcess.exitValue();
-            return new ShellResult(stdout, stderr, exitCode);
+            if (!finished) {
+                killTree(proc);
+                return new ShellResult(readFile(outFile),
+                    readFile(errFile) + "\n[KILLED: timeout after " + timeoutSeconds + "s]", -1);
+            }
+
+            int exitCode = proc.exitValue();
+            return new ShellResult(readFile(outFile), readFile(errFile), exitCode);
         } catch (Exception e) {
             return new ShellResult("", e.getMessage(), -1);
         } finally {
             currentProcess = null;
+            deleteQuietly(outFile);
+            deleteQuietly(errFile);
+        }
+    }
+
+    private static void killTree(Process proc) {
+        if (proc == null) {
+            return;
+        }
+        try {
+            proc.descendants().forEach(ProcessHandle::destroyForcibly);
+        } catch (Exception ignored) {
+        }
+        proc.destroyForcibly();
+    }
+
+    private static String readFile(Path path) {
+        try {
+            return Files.readString(path);
+        } catch (IOException e) {
+            return "";
+        }
+    }
+
+    private static void deleteQuietly(Path path) {
+        if (path != null) {
+            try {
+                Files.deleteIfExists(path);
+            } catch (IOException ignored) {
+            }
         }
     }
 

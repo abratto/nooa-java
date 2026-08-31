@@ -8,17 +8,18 @@ public record ExecutionResult(
     String stderr,
     String error,
     Object returnValue,
-    boolean success
+    boolean success,
+    boolean explicitReturn
 ) {
     public static ExecutionResult ofValue(Object value) {
-        return new ExecutionResult("", "", null, value, true);
+        return new ExecutionResult("", "", null, value, true, false);
     }
 
     public static ExecutionResult ofError(String error) {
-        return new ExecutionResult("", "", error, null, false);
+        return new ExecutionResult("", "", error, null, false, false);
     }
 
     public static ExecutionResult ofStdout(String stdout, Object value) {
-        return new ExecutionResult(stdout, "", null, value, true);
+        return new ExecutionResult(stdout, "", null, value, true, false);
     }
 }

@@ -45,6 +45,35 @@ class VisibilityTest {
     }
 
     @Test
+    @DisplayName("@SystemPrompt resolved on instrumented (factory-created) agent")
+    void systemPromptResolvedWhenInstrumented() {
+        var llm = new FakeLLMClient();
+        var agent = AgentFactory.create(TestPromptedAgent.class, llm);
+        try {
+            String prompt = agent.resolveSystemPrompt();
+            assertThat(prompt).contains("You are a test agent");
+            assertThat(prompt).doesNotStartWith("{");
+        } finally {
+            agent.close();
+        }
+    }
+
+    @Test
+    @DisplayName("context render includes agent doc, not literal placeholders")
+    void contextRenderResolvesAgentDoc() {
+        var llm = new FakeLLMClient();
+        var agent = AgentFactory.create(TestDeterministicAgent.class, llm);
+        try {
+            String rendered = agent.contextManager().render(agent);
+            assertThat(rendered).contains("helper");
+            assertThat(rendered).doesNotContain("{AgentDoc.of");
+            assertThat(rendered).doesNotContain("{AgentDoc.instanceValues");
+        } finally {
+            agent.close();
+        }
+    }
+
+    @Test
     @DisplayName("All core annotations loadable")
     void annotationsLoadable() {
         assertThat(Generate.class).isNotNull();

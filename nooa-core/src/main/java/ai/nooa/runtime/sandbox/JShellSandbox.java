@@ -6,11 +6,16 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.*;
 import jdk.jshell.JShell;
 import jdk.jshell.Snippet;
 import jdk.jshell.SnippetEvent;
+import jdk.jshell.execution.LocalExecutionControl;
+import jdk.jshell.spi.ExecutionControl;
+import jdk.jshell.spi.ExecutionControlProvider;
+import jdk.jshell.spi.ExecutionEnv;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,8 +52,34 @@ public final class JShellSandbox implements AutoCloseable {
         this.jshell = JShell.builder()
             .out(new PrintStream(stdoutCapture))
             .err(new PrintStream(stderrCapture))
+            .executionEngine(
+                new AppClassLoaderExecutionControlProvider(agent.getClass().getClassLoader()),
+                Map.of())
             .build();
         loadPreamble(agent);
+    }
+
+    /**
+     * Execution control that runs generated code in-process against the
+     * agent's own classloader, so framework classes (and the agent instance)
+     * are shared instead of being re-loaded in an isolated engine classloader.
+     */
+    private static final class AppClassLoaderExecutionControlProvider implements ExecutionControlProvider {
+        private final ClassLoader classLoader;
+
+        AppClassLoaderExecutionControlProvider(ClassLoader classLoader) {
+            this.classLoader = classLoader;
+        }
+
+        @Override
+        public String name() {
+            return "nooa-app-classloader";
+        }
+
+        @Override
+        public ExecutionControl generate(ExecutionEnv env, Map<String, String> parameters) {
+            return new LocalExecutionControl(classLoader);
+        }
     }
 
     private void loadPreamble(Agent agent) {
@@ -60,8 +91,18 @@ public final class JShellSandbox implements AutoCloseable {
         ).forEach(jshell::eval);
 
         SandboxContext.setAgent(agent);
+        Class<?> agentType = agent.getClass();
+        Class<?> superType = agentType.getSuperclass();
+        if (superType != null && superType != Agent.class && Agent.class.isAssignableFrom(superType)) {
+            agentType = superType;
+        }
+        String agentTypeName = agentType.getCanonicalName();
+        if (agentTypeName == null) {
+            agentTypeName = agentType.getName();
+        }
         jshell.eval(
-            "var __agent__ = ai.nooa.runtime.sandbox.SandboxContext.getAgent();");
+            "var __agent__ = (" + agentTypeName + ")"
+            + " ai.nooa.runtime.sandbox.SandboxContext.getAgent();");
         jshell.eval(
             "var __context__ = __agent__.context();\n"
             + "var __events__ = __agent__.events();");
@@ -75,6 +116,17 @@ public final class JShellSandbox implements AutoCloseable {
     }
 
     /**
+     * Bind a method argument as a typed REPL variable so generated code can
+     * reference it by name (e.g. {@code stageId}, {@code inputs}).
+     */
+    public void bindVariable(String name, String typeName, Object value) {
+        SandboxContext.setVariable(name, value);
+        jshell.eval(
+            "var " + name + " = (" + typeName + ")"
+            + " ai.nooa.runtime.sandbox.SandboxContext.getVariable(\"" + name + "\");");
+    }
+
+    /**
      * Execute a code snippet with timeout enforcement.
      */
     public ExecutionResult execute(String code) {
@@ -84,14 +136,14 @@ public final class JShellSandbox implements AutoCloseable {
         stderrCapture.reset();
 
         if (containsBlockedImports(code)) {
-            return new ExecutionResult("", "", "Blocked import or API used", null, false);
+            return new ExecutionResult("", "", "Blocked import or API used", null, false, false);
         }
 
         try {
             return executeWithTimeout(code);
         } catch (TimeoutException _) {
             return new ExecutionResult("", "", "Execution timed out after " + timeoutMs + "ms",
-                null, false);
+                null, false, false);
         }
     }
 
@@ -106,10 +158,10 @@ public final class JShellSandbox implements AutoCloseable {
                 return future.get(timeoutMs, TimeUnit.MILLISECONDS);
             } catch (InterruptedException _) {
                 Thread.currentThread().interrupt();
-                return new ExecutionResult("", "", "Interrupted", null, false);
+                return new ExecutionResult("", "", "Interrupted", null, false, false);
             } catch (java.util.concurrent.ExecutionException e) {
                 return new ExecutionResult("", "",
-                    e.getCause() != null ? e.getCause().getMessage() : e.getMessage(), null, false);
+                    e.getCause() != null ? e.getCause().getMessage() : e.getMessage(), null, false, false);
             }
         }
     }
@@ -138,12 +190,13 @@ public final class JShellSandbox implements AutoCloseable {
 
         // Check if returnResult was called
         Object sandboxReturn = SandboxContext.consumeReturnValue();
-        if (sandboxReturn != null) {
+        boolean explicitReturn = sandboxReturn != null;
+        if (explicitReturn) {
             returnValue = sandboxReturn;
         }
 
         boolean success = error == null;
-        return new ExecutionResult(stdout, stderr, error, returnValue, success);
+        return new ExecutionResult(stdout, stderr, error, returnValue, success, explicitReturn);
     }
 
     private String formatException(Exception ex) {
