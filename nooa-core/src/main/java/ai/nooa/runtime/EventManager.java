@@ -71,6 +71,11 @@ public final class EventManager {
         listeners.add(listener);
     }
 
+    /** Removes a previously registered listener (no-op if absent). */
+    public void removeListener(Consumer<Event> listener) {
+        listeners.remove(listener);
+    }
+
     /**
      * Returns events as LLM messages for context building.
      */
