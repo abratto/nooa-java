@@ -1,6 +1,7 @@
 package ai.nooa.llm;
 
 import java.util.ArrayDeque;
+import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -44,6 +45,13 @@ public final class FakeLLMClient extends UnifiedLLM {
                 + callCount + ")");
         }
         return response;
+    }
+
+    @Override
+    public LLMResponse chat(List<Message> messages, List<Tool> tools,
+                            Type outputModel, Map<String, Object> samplingParams) {
+        Class<?> raw = outputModel instanceof Class<?> clazz ? clazz : Object.class;
+        return chat(messages, tools, raw, samplingParams);
     }
 
     public List<CallRecord> calls() { return List.copyOf(calls); }

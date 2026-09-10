@@ -1,6 +1,6 @@
 package ai.nooa.strategy;
 
-import ai.nooa.NooaException;
+import ai.nooa.ValidationError;
 
 /**
  * Pre/post-condition validation for generation methods.
@@ -48,7 +48,7 @@ public final class MethodConditions {
         }
     }
 
-    public static final class PreconditionError extends NooaException {
+    public static final class PreconditionError extends ValidationError {
         public PreconditionError(String msg) { super("Precondition failed: " + msg); }
     }
 
@@ -56,7 +56,7 @@ public final class MethodConditions {
      * Special error caught by strategies to trigger a validation retry.
      * Different from PreconditionError — this means "try again to fix it."
      */
-    public static final class InvariantError extends NooaException {
+    public static final class InvariantError extends ValidationError {
         public InvariantError(String msg) { super("Invariant failed: " + msg); }
     }
 }

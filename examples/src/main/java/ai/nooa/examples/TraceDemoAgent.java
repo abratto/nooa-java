@@ -7,7 +7,7 @@ import ai.nooa.llm.UnifiedLLM;
 public class TraceDemoAgent extends Agent {
     public TraceDemoAgent(UnifiedLLM llm) { super(llm); }
 
-    @Generate
+    @Generate(prompt = "Greet the person warmly and concisely.")
     public String greet(String name) {
         throw new UnsupportedOperationException();
     }

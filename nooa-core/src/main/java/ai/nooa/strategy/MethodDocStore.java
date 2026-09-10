@@ -5,9 +5,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Stores method Javadoc captured at instrumentation time by AgentFactory.
- * Javadoc is not available at runtime via reflection, so we capture it
- * during class loading and store it here.
+ * Stores runtime method prompts captured at instrumentation time by
+ * AgentFactory. Java Javadoc is not available through standard reflection,
+ * so Generate.prompt is the source of truth.
  */
 public final class MethodDocStore {
 

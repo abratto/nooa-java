@@ -117,6 +117,39 @@ class CodeActStrategyTest {
     }
 
     @Test
+    @DisplayName("runs configured prefill before the first CodeAct turn")
+    void runsConfiguredPrefill() throws Exception {
+        var configured = new CodeActStrategy(CodeActConfig.builder()
+            .prefill(call -> "String prepared = \"prefilled\";")
+            .build());
+        llm.respondWith(List.of(
+            new LLMResponse.ToolCall("call_1", "executeJava",
+                Map.of("code", "returnResult(prepared);"))));
+        var call = CurrentCall.fromMethod(
+            TestAgent.class.getDeclaredMethod("generate", String.class),
+            new Object[]{"test"});
+
+        assertThat(configured.execute(agent.runtime(), call)).isEqualTo("prefilled");
+        assertThat(agent.eventManager().all()).anyMatch(e ->
+            e instanceof Event.Feedback feedback
+                && feedback.content().contains("CodeAct prefill"));
+    }
+
+    @Test
+    @DisplayName("default prefill exposes named inputs in the persistent session")
+    void defaultPrefillExposesNamedInputs() throws Exception {
+        llm.respondWith(List.of(
+            new LLMResponse.ToolCall("call_1", "executeJava",
+                Map.of("code", "returnResult(__inputs.get(\"x\"));"))));
+        var call = CurrentCall.fromMethod(
+            TestAgent.class.getDeclaredMethod("generate", String.class),
+            new Object[]{"prepared"});
+
+        assertThat(new CodeActStrategy(CodeActConfig.defaults()).execute(agent.runtime(), call))
+            .isEqualTo("prepared");
+    }
+
+    @Test
     @DisplayName("returnResult tool schema reflects the return type")
     void returnResultToolSchemaReflectsReturnType() {
         var tool = CodeActStrategy.returnResultTool(Result.class);

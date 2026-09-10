@@ -40,8 +40,8 @@ import java.util.UUID;
  *         return db.count(item);
  *     }
  *
- *     // Generation method — doc comment = prompt, body replaced at runtime
- *     &#64;Generate
+    *     // Generation method — prompt is runtime metadata, body is replaced at runtime
+    *     &#64;Generate(prompt = "Analyze the topic and return a concise answer.")
  *     public String analyze(String topic) {
  *         throw new UnsupportedOperationException("Generated at runtime");
  *     }

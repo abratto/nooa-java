@@ -7,7 +7,7 @@ import ai.nooa.llm.UnifiedLLM;
 public class McpDemoAgent extends Agent {
     public McpDemoAgent(UnifiedLLM llm) { super(llm); }
 
-    @Generate
+    @Generate(prompt = "Analyze the input using the available MCP-backed capabilities and return a concise, grounded answer.")
     public String analyze(String input) {
         throw new UnsupportedOperationException();
     }

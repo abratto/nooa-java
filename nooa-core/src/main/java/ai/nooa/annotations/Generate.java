@@ -8,13 +8,15 @@ import java.lang.annotation.Target;
 /**
  * Marks a method for LLM code generation at runtime.
  *
- * <p>The returned {@code CompletableFuture} resolves when the LLM
- * completes the method body. The method's Javadoc comment serves
- * as the prompt.</p>
+ * <p>The method may use any synchronous return type supported by its
+ * generation strategy. The runtime invokes it synchronously while the
+ * LLM work runs on a virtual thread. Use {@link #prompt()} to provide
+ * the runtime instruction; Java Javadoc is not available through
+ * reflection.</p>
  *
  * <pre>{@code
- * &#64;Generate
- * public CompletableFuture<String> greet(String name) {
+ * &#64;Generate(prompt = "Greet the person warmly.")
+ * public String greet(String name) {
  *     throw new UnsupportedOperationException("Generated at runtime");
  * }
  * }</pre>
@@ -22,4 +24,6 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
 public @interface Generate {
+	/** Runtime instruction sent with the generated method call. */
+	String prompt() default "";
 }

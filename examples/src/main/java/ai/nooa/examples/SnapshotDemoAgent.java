@@ -7,7 +7,7 @@ import ai.nooa.llm.UnifiedLLM;
 public class SnapshotDemoAgent extends Agent {
     public SnapshotDemoAgent(UnifiedLLM llm) { super(llm); }
 
-    @Generate
+    @Generate(prompt = "Analyze the input and return a concise summary grounded in the current agent context.")
     public String analyze(String input) {
         throw new UnsupportedOperationException();
     }

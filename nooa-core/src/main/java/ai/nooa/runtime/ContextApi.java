@@ -24,6 +24,10 @@ public final class ContextApi {
         agent.contextManager().put(key, value);
     }
 
+    public void put(String key, Object value) {
+        agent.contextManager().put(key, value);
+    }
+
     public void putDynamic(String key, String expression) {
         agent.contextManager().putDynamic(key, expression);
     }

@@ -1,16 +1,17 @@
 package ai.nooa.strategy;
 
 import ai.nooa.context.Event;
-import ai.nooa.llm.Message;
-import java.util.ArrayList;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Reflexion strategy: generate → reflect → improve loop.
+ * Reflexion strategy: generate -> reflect -> improve loop.
  * Wraps a base strategy and iteratively critiques/improves output.
  */
 public final class ReflexionStrategy implements GenerationStrategy {
+
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final GenerationStrategy baseStrategy;
     private final int maxIterations;
@@ -25,18 +26,22 @@ public final class ReflexionStrategy implements GenerationStrategy {
     }
 
     @Override
-    public String name() { return "ReflexionStrategy"; }
+    public String name() {
+        return "ReflexionStrategy";
+    }
 
     @Override
     public Object execute(RuntimeServices runtime, CurrentCall call) {
         Object lastResult = null;
-        String critique = null;
+        ReflectionResult critique = null;
 
         for (int i = 0; i < maxIterations; i++) {
             try {
                 if (critique != null) {
                     var feedback = "Previous result: " + lastResult
-                        + "\n\nCritique: " + critique
+                        + "\n\nReasoning: " + critique.reasoning()
+                        + "\n\nIssues: " + String.join("; ", critique.issues())
+                        + "\n\nSuggestions: " + String.join("; ", critique.suggestions())
                         + "\n\nPlease improve the result based on this critique.";
                     runtime.eventManager().add(new Event.Feedback(feedback));
                 }
@@ -45,12 +50,14 @@ public final class ReflexionStrategy implements GenerationStrategy {
 
                 if (i < maxIterations - 1) {
                     critique = reflect(runtime, lastResult, call);
-                    if (critique == null || critique.isBlank()) {
-                        return lastResult; // No critique → result is good enough
+                    if (critique.satisfactory()) {
+                        return lastResult;
                     }
                 }
             } catch (Exception e) {
-                if (i >= maxIterations - 1) throw e;
+                if (i >= maxIterations - 1) {
+                    throw e;
+                }
                 runtime.eventManager().add(new Event.ErrorEvent(
                     "Attempt " + (i + 1) + " failed: " + e.getMessage()));
             }
@@ -59,18 +66,26 @@ public final class ReflexionStrategy implements GenerationStrategy {
         return lastResult;
     }
 
-    private String reflect(RuntimeServices runtime, Object result, CurrentCall call) {
+    private ReflectionResult reflect(RuntimeServices runtime, Object result, CurrentCall call) {
         try {
+            String reflectionPrompt = "Evaluate the result produced for the task below.\n"
+                + "Return JSON with fields satisfactory, reasoning, issues, and suggestions.\n\n"
+                + "Result to evaluate:\n" + String.valueOf(result);
             var response = runtime.generate(
-                List.of(), null, Map.of("max_tokens", 500));
+                List.of(), ReflectionResult.class, Map.of("max_tokens", 500), reflectionPrompt);
 
             String content = response.content();
             if (content != null && content.strip().equalsIgnoreCase("OK")) {
-                return null;
+                return new ReflectionResult(true, "", List.of(), List.of());
             }
-            return content;
+            if (content != null && !content.isBlank()) {
+                return JSON.readValue(content, ReflectionResult.class);
+            }
+            return new ReflectionResult(false, "Empty reflection",
+                List.of("No reflection returned"), List.of());
         } catch (Exception e) {
-            return "Error during reflection: " + e.getMessage();
+            return new ReflectionResult(false, "Error during reflection: " + e.getMessage(),
+                List.of("Reflection could not be parsed"), List.of("Retry the task"));
         }
     }
 }

@@ -1,6 +1,7 @@
 package ai.nooa.strategy;
 
 import ai.nooa.GenerationError;
+import ai.nooa.RestrictedCodeError;
 import ai.nooa.config.CodeActConfig;
 import ai.nooa.context.Event;
 import ai.nooa.llm.LLMResponse;
@@ -168,6 +169,8 @@ public final class CodeActStrategy implements GenerationStrategy {
 
         bindMethodArguments(runtime, call);
 
+        runPrefill(runtime, call);
+
         while (iteration < config.maxIterations()) {
             iteration++;
             try {
@@ -237,6 +240,28 @@ public final class CodeActStrategy implements GenerationStrategy {
             }
             runtime.bindVariable(name, params[i].getParameterizedType().getTypeName(), args[i]);
         }
+        runtime.bindVariable("__inputs", "java.util.Map",
+            new LinkedHashMap<>(call.namedArgs()));
+    }
+
+    private void runPrefill(RuntimeServices runtime, CurrentCall call) {
+        if (config.prefill() == null) {
+            return;
+        }
+        String code = config.prefill().code(call);
+        if (code == null || code.isBlank()) {
+            return;
+        }
+        runtime.eventManager().add(new Event.Feedback("Running CodeAct prefill."));
+        ExecutionResult result = runtime.executeCode(code, Map.of());
+        runtime.eventManager().add(new Event.ExecutionOutput(
+            result.stdout(), result.stderr(), result.error()));
+        if (!result.success()) {
+            if (result.error() != null && result.error().startsWith("Blocked")) {
+                throw new RestrictedCodeError("CodeAct prefill failed: " + result.error());
+            }
+            throw new GenerationError("CodeAct prefill failed: " + result.error());
+        }
     }
 
     private Object processToolCall(LLMResponse.ToolCall tc, RuntimeServices runtime, Class<?> returnType) {
@@ -248,6 +273,10 @@ public final class CodeActStrategy implements GenerationStrategy {
                 ExecutionResult result = runtime.executeCode(code, Map.of());
                 runtime.eventManager().add(new Event.ExecutionOutput(
                     result.stdout(), result.stderr(), result.error()));
+                if (!result.success() && result.error() != null
+                    && result.error().startsWith("Blocked")) {
+                    throw new RestrictedCodeError(result.error());
+                }
                 if (result.explicitReturn() && result.success()) {
                     yield convertToReturnType(result.returnValue(), returnType);
                 }

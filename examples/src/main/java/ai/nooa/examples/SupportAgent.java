@@ -19,6 +19,6 @@ public class SupportAgent extends Agent {
 
     int getStock(String item) { return inventory.getOrDefault(item.toLowerCase(), 0); }
 
-    @Generate
+    @Generate(prompt = "Check the requested order against the helper-provided inventory. State any shortfall clearly and suggest a next step. Keep the answer brief and actionable.")
     public String checkOrder(String item, int quantity) { throw new UnsupportedOperationException(); }
 }

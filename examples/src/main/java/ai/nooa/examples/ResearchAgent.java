@@ -17,6 +17,6 @@ public class ResearchAgent extends Agent {
 
     String getCurrentTime() { return java.time.LocalDateTime.now().toString(); }
 
-    @Generate
+    @Generate(prompt = "Answer the question with a brief, grounded summary using the Java helper results. Include the most relevant fact, explanation, and current time when useful. Do not invent sources or citations.")
     public String research(String question) { throw new UnsupportedOperationException(); }
 }

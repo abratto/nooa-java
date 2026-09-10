@@ -1,12 +1,22 @@
 package ai.nooa;
 
 import ai.nooa.llm.FakeLLMClient;
+import ai.nooa.config.AgentConfig;
+import ai.nooa.runtime.CallMiddleware;
+import ai.nooa.strategy.CurrentCall;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.*;
 
 import static org.assertj.core.api.Assertions.*;
 
 @DisplayName("AgentFactory")
 class AgentFactoryTest {
+
+    public static class MiddlewareAgent extends Agent {
+        public MiddlewareAgent(ai.nooa.llm.UnifiedLLM llm, AgentConfig config) { super(llm, config); }
+        @ai.nooa.annotations.Generate
+        public String generate(String input) { throw new UnsupportedOperationException(); }
+    }
 
     @Test
     @DisplayName("create produces a non-null instance")
@@ -74,5 +84,27 @@ class AgentFactoryTest {
         var agent = AgentFactory.create(TestDeterministicAgent.class, llm);
         assertThat(agent.helper("test")).isEqualTo("helped: test");
         agent.close();
+    }
+
+    @Test
+    @DisplayName("middleware wraps generated calls")
+    void middlewareWrapsGeneratedCalls() {
+        var before = new AtomicInteger();
+        var after = new AtomicInteger();
+        var hook = new CallMiddleware() {
+            @Override public void before(Agent agent, CurrentCall call) { before.incrementAndGet(); }
+            @Override public Object after(Agent agent, CurrentCall call, Object result) {
+                after.incrementAndGet();
+                return result;
+            }
+        };
+        var config = AgentConfig.defaults()
+            .withDefaultStrategy((runtime, call) -> "done")
+            .withMiddleware(hook);
+        var agent = AgentFactory.create(MiddlewareAgent.class, new FakeLLMClient(), config);
+        assertThat(agent.generate("input")).isEqualTo("done");
+        agent.close();
+        assertThat(before).hasValue(1);
+        assertThat(after).hasValue(1);
     }
 }

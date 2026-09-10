@@ -6,7 +6,7 @@
 
     <groupId>ai.nooa</groupId>
     <artifactId>nooa-parent</artifactId>
-    <version>0.3.0-SNAPSHOT</version>
+    <version>0.4.0</version>
     <packaging>pom</packaging>
 
     <name>NOOA Java — Parent</name>
@@ -14,9 +14,6 @@
 
     <modules>
         <module>nooa-core</module>
-        <module>nooa-clad-runtime</module>
-        <module>nooa-clad</module>
-        <module>nooa-micronaut</module>
         <module>examples</module>
     </modules>
 
@@ -30,7 +27,6 @@
         <junit.version>5.11.3</junit.version>
         <assertj.version>3.27.7</assertj.version>
         <mockito.version>5.14.2</mockito.version>
-        <micronaut.version>4.7.0</micronaut.version>
     </properties>
 
     <dependencyManagement>

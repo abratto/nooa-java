@@ -11,9 +11,12 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -65,6 +68,9 @@ public final class PromptRecorder implements AutoCloseable {
     private volatile MetadataProvider metadataProvider;
     private volatile boolean fileUsable = true;
     private volatile int writeFailures;
+    private int promptSequence;
+    private String previousFingerprint;
+    private int previousSequence;
 
     private PromptRecorder(Path file) {
         this.file = file;
@@ -130,9 +136,18 @@ public final class PromptRecorder implements AutoCloseable {
     }
 
     private String toJson(Event.PromptBuilt pb) {
+        int sequence = ++promptSequence;
+        String fingerprint = fingerprint(pb);
+        boolean duplicate = fingerprint.equals(previousFingerprint);
+
         ObjectNode node = JSON.createObjectNode();
         node.put("event_id", pb.id().toString());
         node.put("timestamp", pb.timestamp().toString());
+        node.put("prompt_sequence", sequence);
+        node.put("prompt_fingerprint", fingerprint);
+        if (duplicate) {
+            node.put("duplicate_of_sequence", previousSequence);
+        }
         node.put("model", pb.modelName());
         node.put("redacted", pb.redacted());
         node.put("output_model", pb.outputModel());
@@ -171,7 +186,41 @@ public final class PromptRecorder implements AutoCloseable {
                 }
             }
         }
+        previousFingerprint = fingerprint;
+        previousSequence = sequence;
         return node.toString();
+    }
+
+    private String fingerprint(Event.PromptBuilt pb) {
+        StringBuilder canonical = new StringBuilder()
+            .append(pb.modelName()).append('\n')
+            .append(pb.outputModel()).append('\n')
+            .append(pb.redacted()).append('\n');
+        for (String tool : pb.toolNames()) {
+            canonical.append("tool:").append(tool).append('\n');
+        }
+        for (Message message : pb.messages()) {
+            canonical.append(message.role()).append('\n')
+                .append(message.name()).append('\n')
+                .append(message.toolCallId()).append('\n')
+                .append(message.content()).append('\n');
+        }
+        pb.samplingParams().entrySet().stream()
+            .sorted(Map.Entry.comparingByKey())
+            .forEach(entry -> canonical.append("param:")
+                .append(entry.getKey()).append('=')
+                .append(entry.getValue()).append('\n'));
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                .digest(canonical.toString().getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(digest.length * 2);
+            for (byte value : digest) {
+                hex.append(String.format("%02x", value));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
     }
 
     /** The file this recorder writes to. */

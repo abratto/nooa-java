@@ -13,25 +13,6 @@ An agent is a single Java class. Methods are capabilities, fields are state,
 annotations are metadata. The SDK handles LLM generation, code execution,
 and structured output enforcement.
 
-## Repository boundaries
-
-This repository contains the Java SDK and runtime for NOOA. The CLAD methodology,
-its workflow rules, and the realized CLAD agent implementation live in separate
-repositories.
-
-This is intentional:
-
-- the root repository tracks the Java SDK implementation
-- the CLAD methodology repo remains the source of truth for the CLAD process,
-  stage model, and artefact rules
-- the CLAD agent repo is the concrete runtime realization of CLAD as a NOOA-based agent
-
-This keeps the SDK general-purpose while making the CLAD-specific workflow a
-distinct implementation and product concern.
-
-For the CLAD methodology, see the CLAD repository.
-For the realized CLAD agent, see the CLAD agent repository.
-
 ## SDK maintenance contract
 
 This repository is the canonical source for the Java SDK itself. The SDK is built
@@ -39,17 +20,12 @@ from the modules in this repo and shipped as Maven artifacts. In other words,
 this is the place where framework API evolution, runtime behavior, compatibility,
 and core library maintenance happen.
 
-The intended model is:
-
-- maintain the generic Java SDK here
-- keep CLAD methodology and policy logic in the CLAD repo
-- keep CLAD-specific agent behavior in the separate CLAD agent repo
-- publish the SDK artifacts from this repo as the reusable dependency for other Java projects
-
-This repo should therefore be treated as the maintenance home for the framework
-source code, even when CLAD-specific implementations live elsewhere.
-
 For the formal SDK release and compatibility policy, see [docs/sdk-versioning.md](docs/sdk-versioning.md).
+For the staged plan to harden CodeAct permission checks, see [docs/roadmap.md](docs/roadmap.md).
+For guidance on choosing runtime shapes and using sessions, skills, middleware, and
+typed failures, see [docs/agent-building-guide.md](docs/agent-building-guide.md).
+For the `nooa-core` package map, strategy/configuration guidance, and current audit
+limits, see [docs/package-reference.md](docs/package-reference.md).
 
 ## Quick Start
 
@@ -77,7 +53,7 @@ System.out.println(greeting);
 <dependency>
   <groupId>ai.nooa</groupId>
   <artifactId>nooa-core</artifactId>
-  <version>0.3.0-SNAPSHOT</version>
+    <version>0.4.0</version>
 </dependency>
 ```
 
@@ -91,7 +67,7 @@ core artifact from this build:
 <dependency>
   <groupId>ai.nooa</groupId>
   <artifactId>nooa-core</artifactId>
-  <version>0.3.0-SNAPSHOT</version>
+    <version>0.4.0</version>
 </dependency>
 ```
 
@@ -863,41 +839,6 @@ assertThat(result).isEqualTo("Hello, World!");
 ```bash
 mvn test   # 135 tests, all passing
 ```
-
-## CLAD: Contract-Led, Artefact-Driven Development
-
-NOOA ships with a built-in agent for the [CLAD methodology](clad/). CLAD is a
-contracts-first process for building software with AI agents under human review.
-Every change has a contract (CONTEXT.md). Every contract produces an artefact
-(a file on disk). Three human gates ensure correctness before implementation.
-
-**One command to start:**
-
-```bash
-# Clone with the CLAD submodule
-git clone --recurse-submodules https://github.com/abratto/nooa-java.git
-cd nooa-java
-mvn install -DskipTests
-
-# Bootstrap a new CLAD project
-java -jar nooa-clad/target/nooa-clad-0.1.0.jar init my-app
-cd my-app
-
-# Set your API key and run
-export OPENAI_API_KEY=sk-...
-java -jar ../nooa-clad/target/nooa-clad-0.1.0.jar run
-```
-
-**What happens:** The agent reads `CONTEXT.md` contracts, produces artefacts via
-the LLM, runs self-verification against the `Verify` checklist, and stops at
-human gates for review. Auto-advance through mechanical stages with `--auto`.
-
-```bash
-nooa clad run --auto          # auto-advance non-gate stages
-nooa clad run --stage 02_concepts  # run a single stage
-```
-
-See [`nooa-clad/README.md`](nooa-clad/README.md) for the full CLI reference.
 
 ## Why Java?
 

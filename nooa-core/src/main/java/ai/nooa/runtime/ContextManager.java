@@ -41,6 +41,18 @@ public final class ContextManager {
         blocks.put(key, ContextBlock.staticBlock(key, value));
     }
 
+    /** Set a structured user-controlled block. */
+    public void put(String key, Object value) {
+        if (value instanceof String text) {
+            put(key, text);
+            return;
+        }
+        if (protectedBlocks.containsKey(key)) {
+            throw new IllegalArgumentException("Cannot override protected block: " + key);
+        }
+        blocks.put(key, ContextBlock.structuredBlock(key, value));
+    }
+
     /**
      * Set a dynamic block (re-evaluated each LLM turn).
      */
@@ -66,6 +78,11 @@ public final class ContextManager {
      * Dynamic blocks are evaluated against the given agent instance.
      */
     public String render(Agent agent) {
+        return render(agent, Integer.MAX_VALUE);
+    }
+
+    /** Render blocks with a hard character bound, preserving block order. */
+    public String render(Agent agent, int maxChars) {
         StringBuilder sb = new StringBuilder();
 
         // Protected blocks first
@@ -75,6 +92,7 @@ public final class ContextManager {
                 sb.append("<").append(entry.getKey()).append(">\n");
                 sb.append(rendered).append("\n");
                 sb.append("</").append(entry.getKey()).append(">\n\n");
+                if (sb.length() >= maxChars) return bounded(sb, maxChars);
             }
         }
 
@@ -85,16 +103,24 @@ public final class ContextManager {
                 sb.append("<").append(entry.getKey()).append(">\n");
                 sb.append(rendered).append("\n");
                 sb.append("</").append(entry.getKey()).append(">\n\n");
+                if (sb.length() >= maxChars) return bounded(sb, maxChars);
             }
         }
 
         return sb.toString().stripTrailing();
     }
 
+    private static String bounded(StringBuilder value, int maxChars) {
+        if (maxChars <= 0) return "";
+        if (value.length() <= maxChars) return value.toString().stripTrailing();
+        return value.substring(0, Math.max(0, maxChars - 16)) + "\n... [truncated]";
+    }
+
     private String renderBlock(ContextBlock block, Agent agent) {
         return switch (block) {
             case ContextBlock.Static s -> s.value();
             case ContextBlock.Dynamic d -> agent.runtime().evaluateExpression(d.expression());
+            case ContextBlock.Structured s -> String.valueOf(s.value());
         };
     }
 

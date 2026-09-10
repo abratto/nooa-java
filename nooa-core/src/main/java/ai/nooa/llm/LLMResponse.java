@@ -8,11 +8,17 @@ import java.util.Map;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record LLMResponse(
     String content,
+    String reasoning,
     List<ToolCall> toolCalls,
     Usage usage,
     String model,
     String finishReason
 ) {
+    public LLMResponse(String content, List<ToolCall> toolCalls, Usage usage,
+                       String model, String finishReason) {
+        this(content, null, toolCalls, usage, model, finishReason);
+    }
+
     public boolean hasToolCalls() {
         return toolCalls != null && !toolCalls.isEmpty();
     }

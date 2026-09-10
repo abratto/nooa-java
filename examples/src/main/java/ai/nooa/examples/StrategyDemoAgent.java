@@ -15,17 +15,19 @@ record MathClassification(String type, String difficulty) {}
 public class StrategyDemoAgent extends Agent {
     public StrategyDemoAgent(UnifiedLLM llm) { super(llm); }
 
-    @Generate
+    @Generate(prompt = "Solve the math problem and return the answer with clear intermediate steps.")
     public MathSolution solveWithCode(String problem) {
         throw new UnsupportedOperationException();
     }
 
-    @Generate @Strategy(PredictStrategy.class)
+    @Generate(prompt = "Classify the math problem by type and difficulty and return the typed result.")
+    @Strategy(PredictStrategy.class)
     public MathClassification classifyProblem(String problem) {
         throw new UnsupportedOperationException();
     }
 
-    @Generate @Strategy(ReflexionStrategy.class)
+    @Generate(prompt = "Solve the math problem, review the solution for mistakes, and return the corrected answer with steps.")
+    @Strategy(ReflexionStrategy.class)
     public MathSolution solveWithReflection(String problem) {
         throw new UnsupportedOperationException();
     }

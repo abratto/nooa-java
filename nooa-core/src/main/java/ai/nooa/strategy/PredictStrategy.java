@@ -4,9 +4,9 @@ import ai.nooa.GenerationError;
 import ai.nooa.config.PredictConfig;
 import ai.nooa.llm.LLMResponse;
 import ai.nooa.llm.Message;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.lang.reflect.Type;
 
 /**
  * Single-shot structured output strategy.
@@ -22,32 +22,58 @@ public final class PredictStrategy implements GenerationStrategy {
     public Object execute(RuntimeServices runtime, CurrentCall call) {
         int attempts = 0;
         Exception lastError = null;
+        String retryFeedback = null;
 
         while (attempts < config.maxRetries()) {
             attempts++;
             try {
-                List<Message> messages = new ArrayList<>();
-                messages.add(Message.system(buildSystemPrompt(runtime)));
-                messages.add(Message.user(call.docstring()));
-
                 LLMResponse response = runtime.generate(
-                    List.of(), call.returnType(), buildSamplingParams(runtime));
+                    List.of(), call.genericReturnType(), buildSamplingParams(runtime), retryFeedback);
 
                 String content = response.content();
                 if (content != null && !content.isBlank()) {
-                    return parseResponse(content, call.returnType());
+                    return parseResponse(content, call.genericReturnType());
                 }
                 throw new GenerationError("Empty response");
             } catch (Exception e) {
                 lastError = e;
+                retryFeedback = retryDiagnostic(e, call.genericReturnType());
             }
         }
         throw new GenerationError("PredictStrategy failed after " + config.maxRetries() + " attempts", lastError);
     }
 
-    private String buildSystemPrompt(RuntimeServices runtime) {
-        return "You are a structured output generator.\n\n"
-            + runtime.agent().contextManager().render(runtime.agent());
+    private String retryDiagnostic(Exception error, Type returnType) {
+        String message = error.getMessage();
+        if (message == null || message.isBlank()) {
+            message = error.getClass().getSimpleName();
+        }
+        int limit = 800;
+        if (message.length() > limit) {
+            message = message.substring(0, limit);
+        }
+        String target = returnType == null ? "the declared return type"
+            : "`" + displayType(returnType) + "` (fields: " + describeFields(returnType) + ")";
+        return "Previous attempt failed structured-output validation. Correct only this issue, keep the raw content otherwise unchanged, and return the same schema:\n"
+            + "  Expected shape: " + target + "\n"
+            + "  Failure: " + message;
+    }
+
+    private String describeFields(Type type) {
+        if (!(type instanceof Class<?> clazz) || !clazz.isRecord()) {
+            return "JSON array";
+        }
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        return String.join(", ", java.util.Arrays.stream(clazz.getRecordComponents())
+            .map(component -> component.getName()) // JSON property names typically match
+            .toList());
+    }
+
+    private String displayType(Type type) {
+        if (type instanceof Class<?> clazz) {
+            return clazz.getSimpleName();
+        }
+        return type.getTypeName();
     }
 
     private Map<String, Object> buildSamplingParams(RuntimeServices runtime) {
@@ -80,9 +106,12 @@ public final class PredictStrategy implements GenerationStrategy {
         return params;
     }
 
-    private Object parseResponse(String content, Class<?> returnType) throws Exception {
+    private Object parseResponse(String content, Type returnType) throws Exception {
+        if (returnType == String.class || returnType == CharSequence.class) {
+            return content.strip();
+        }
         var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-        return mapper.readValue(extractJson(content), returnType);
+        return mapper.readValue(extractJson(content), mapper.constructType(returnType));
     }
 
     private String extractJson(String content) {

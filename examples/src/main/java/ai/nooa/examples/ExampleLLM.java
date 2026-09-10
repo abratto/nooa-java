@@ -8,7 +8,7 @@ public final class ExampleLLM {
     public static UnifiedLLM create() {
         String baseUrl = firstNonBlank(System.getenv("NOOA_BASE_URL"), System.getenv("OPENAI_BASE_URL"));
         String apiKey = firstNonBlank(System.getenv("NOOA_API_KEY"), System.getenv("OPENAI_API_KEY"));
-        String model = firstNonBlank(System.getenv("NOOA_MODEL"), System.getenv("OPENAI_MODEL"), "qwen3-coder-next:latest");
+        String model = firstNonBlank(System.getenv("NOOA_MODEL"), System.getenv("OPENAI_MODEL"), "qwen3.8:27b-mlx");
 
         if (baseUrl != null && !baseUrl.isBlank()) {
             return UnifiedLLM.create(UnifiedLLM.custom(baseUrl,

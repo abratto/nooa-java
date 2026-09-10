@@ -32,6 +32,6 @@ public class ProjectAgent extends Agent {
             .ifPresent(t -> tasks.set(tasks.indexOf(t), new Task(name, true)));
     }
 
-    @Generate
+    @Generate(prompt = "Create a short daily plan from the current project status. Prioritize blocked work and the next most important action; do not invent tasks.")
     public String planDay() { throw new UnsupportedOperationException(); }
 }

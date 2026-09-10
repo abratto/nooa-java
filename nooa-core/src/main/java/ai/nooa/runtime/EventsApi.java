@@ -3,6 +3,7 @@ package ai.nooa.runtime;
 import ai.nooa.Agent;
 import ai.nooa.context.Event;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * LLM-facing events API. Lets generated code query past events
@@ -18,6 +19,19 @@ public final class EventsApi {
 
     public List<Event> all() {
         return agent.eventManager().all();
+    }
+
+    /** Events emitted by the active generation call, excluding prior calls. */
+    public List<Event> current() {
+        return agent.eventManager().current();
+    }
+
+    public UUID currentCallId() {
+        return agent.eventManager().currentCallId();
+    }
+
+    public List<Event> forCall(UUID callId) {
+        return agent.eventManager().forCall(callId);
     }
 
     public List<Event> since(int index) {

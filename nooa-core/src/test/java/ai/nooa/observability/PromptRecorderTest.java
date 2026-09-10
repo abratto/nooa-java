@@ -70,6 +70,34 @@ class PromptRecorderTest {
     }
 
     @Test
+    @DisplayName("marks identical consecutive prompts without dropping either event")
+    void marksIdenticalConsecutivePrompts() throws Exception {
+        var agent = new TestAgent(new FakeLLMClient());
+        var file = tempDir.resolve("prompts.jsonl");
+        var recorder = PromptRecorder.attach(agent, file);
+        var prompt = new Event.PromptBuilt(
+            "fake-model",
+            List.of(Message.system("sys"), Message.user("hello")),
+            List.of(),
+            "java.lang.String",
+            Map.of(),
+            true);
+
+        agent.eventManager().add(prompt);
+        agent.eventManager().add(prompt);
+
+        assertThat(recorder.count()).isEqualTo(2);
+        var lines = Files.readAllLines(file);
+        var first = PromptRecorder.parseLine(lines.get(0));
+        var second = PromptRecorder.parseLine(lines.get(1));
+        assertThat(first.get("prompt_sequence").asInt()).isEqualTo(1);
+        assertThat(second.get("prompt_sequence").asInt()).isEqualTo(2);
+        assertThat(second.get("prompt_fingerprint").asText())
+            .isEqualTo(first.get("prompt_fingerprint").asText());
+        assertThat(second.get("duplicate_of_sequence").asInt()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("ignores non-PromptBuilt events")
     void ignoresNonPromptEvents() throws Exception {
         var agent = new TestAgent(new FakeLLMClient());

@@ -4,6 +4,8 @@ import ai.nooa.Agent;
 import ai.nooa.AgentFactory;
 import ai.nooa.annotations.Generate;
 import ai.nooa.llm.UnifiedLLM;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -18,6 +20,27 @@ import java.util.function.Consumer;
  * }</pre>
  */
 public final class InteractiveAgent {
+
+    public enum TurnStatus { COMPLETED, NEED_INPUT, COMMAND, ERROR }
+
+    public record TurnResult(TurnStatus status, String output, String error,
+                             Object value) {
+        public static TurnResult completed(Object value) {
+            return new TurnResult(TurnStatus.COMPLETED,
+                value == null ? "" : value.toString(), null, value);
+        }
+
+        public static TurnResult needInput(String prompt) {
+            return new TurnResult(TurnStatus.NEED_INPUT, prompt, null, null);
+        }
+
+        public static TurnResult error(Throwable error) {
+            Throwable cause = error instanceof InvocationTargetException ite
+                && ite.getCause() != null ? ite.getCause() : error;
+            return new TurnResult(TurnStatus.ERROR, null,
+                cause.getMessage() == null ? cause.toString() : cause.getMessage(), null);
+        }
+    }
 
     private final Agent agent;
     private final QueueManager queueManager;
@@ -39,9 +62,39 @@ public final class InteractiveAgent {
         return ia;
     }
 
+    /** Create an interactive session without starting a console loop. */
+    public static InteractiveAgent create(Agent agent) {
+        return new InteractiveAgent(agent);
+    }
+
     public InteractiveAgent onOutput(Consumer<String> handler) {
         this.outputHandler = handler;
         return this;
+    }
+
+    /** Queue a user turn without starting the console loop. */
+    public InteractiveAgent submit(String message) {
+        queueManager.submit("user", message);
+        return this;
+    }
+
+    /** Queue a system event for the next turn. */
+    public InteractiveAgent system(Object event) {
+        queueManager.submit("system", event);
+        return this;
+    }
+
+    /** Execute one queued user/system turn. */
+    public TurnResult turn() {
+        var item = queueManager.poll(0);
+        if (item.isEmpty()) {
+            return TurnResult.needInput("Waiting for input");
+        }
+        if (!"user".equals(item.get().channel())) {
+            return TurnResult.completed(item.get().payload());
+        }
+        String message = item.get().payload().toString();
+        return message.startsWith("/") ? dispatchCommand(message) : dispatchMessage(message);
     }
 
     /** Register a custom slash command. */
@@ -49,6 +102,11 @@ public final class InteractiveAgent {
                                      Consumer<List<String>> handler) {
         commands.put("/" + name, new Command(description, handler));
         return this;
+    }
+
+    /** Execute a slash command and return its typed outcome. */
+    public TurnResult commandResult(String input) {
+        return dispatchCommand(input);
     }
 
     private void registerBuiltins() {
@@ -105,37 +163,64 @@ public final class InteractiveAgent {
     }
 
     private void handleCommand(String input) {
-        String[] parts = input.split("\\s+");
-        String cmd = parts[0].toLowerCase();
-        List<String> args = parts.length > 1
-            ? Arrays.asList(parts).subList(1, parts.length)
-            : List.of();
-
-        if ("/exit".equals(cmd) || "/quit".equals(cmd)) {
-            running = false;
-            output("Goodbye.");
-            return;
-        }
-
-        Command command = commands.get(cmd);
-        if (command != null) {
-            try {
-                command.handler.accept(args);
-            } catch (Exception e) {
-                output("Error: " + e.getMessage());
-            }
-        } else {
-            output("Unknown command: " + cmd + ". Type /help for available commands.");
-        }
+        TurnResult result = dispatchCommand(input);
+        if (result.output() != null && !result.output().isBlank()) output(result.output());
+        if (result.error() != null) output("Error: " + result.error());
     }
 
     private void handleMessage(String input) {
-        // Find a @Generate method to route the message to
         output("Processing: " + input);
-        queueManager.submit(input);
+        submit(input);
+        TurnResult result = turn();
+        if (result.output() != null && !result.output().isBlank()) output(result.output());
+        if (result.error() != null) output("Error: " + result.error());
+    }
 
-        // For a real implementation, this would call the agent's generation method.
-        // Here we signal that the message was queued.
+    private TurnResult dispatchMessage(String input) {
+        try {
+            Method method = findMessageMethod(agent.getClass());
+            return TurnResult.completed(method.invoke(agent, input));
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            return TurnResult.error(error);
+        }
+    }
+
+    private TurnResult dispatchCommand(String input) {
+        String[] parts = input.strip().split("\\s+");
+        String commandName = parts[0].toLowerCase(Locale.ROOT);
+        List<String> args = parts.length > 1
+            ? Arrays.asList(parts).subList(1, parts.length) : List.of();
+        if ("/exit".equals(commandName) || "/quit".equals(commandName)) {
+            running = false;
+            return new TurnResult(TurnStatus.COMMAND, "Goodbye.", null, commandName);
+        }
+        Command command = commands.get(commandName);
+        if (command == null) {
+            return new TurnResult(TurnStatus.ERROR, null,
+                "Unknown command: " + commandName, commandName);
+        }
+        try {
+            command.handler.accept(args);
+            return new TurnResult(TurnStatus.COMMAND, null, null, commandName);
+        } catch (Exception error) {
+            return TurnResult.error(error);
+        }
+    }
+
+    private static Method findMessageMethod(Class<?> type) {
+        for (Class<?> current = type; current != null && current != Agent.class;
+             current = current.getSuperclass()) {
+            for (Method method : current.getDeclaredMethods()) {
+                if (method.isAnnotationPresent(Generate.class)
+                    && method.getParameterCount() == 1
+                    && method.getParameterTypes()[0] == String.class) {
+                    method.setAccessible(true);
+                    return method;
+                }
+            }
+        }
+        throw new IllegalStateException(
+            "Interactive agent requires a one-String @Generate method");
     }
 
     public void output(String message) {

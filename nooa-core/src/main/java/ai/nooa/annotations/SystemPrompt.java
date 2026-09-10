@@ -7,7 +7,7 @@ import java.lang.annotation.Target;
 
 /**
  * Overrides the system prompt for an agent class.
- * If absent, the class Javadoc comment is used as the system prompt.
+ * If absent, the agent class name is used as the system prompt.
  *
  * <p>Supports {@code {expression}} placeholders resolved against the
  * agent instance at generation time. {@code {type.xxx}} references the

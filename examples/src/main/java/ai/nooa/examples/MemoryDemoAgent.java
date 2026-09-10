@@ -74,7 +74,7 @@ public class MemoryDemoAgent extends Agent {
 
     @Override public void close() { memory.close(); super.close(); }
 
-    @Generate
+    @Generate(prompt = "Answer the input using relevant remembered context. Prefer stored facts over guesses and keep the response concise.")
     public String analyze(String input) {
         throw new UnsupportedOperationException();
     }

@@ -52,4 +52,62 @@ class ReflexionStrategyTest {
         var result = reflexion.execute(agent.runtime(), call);
         assertThat(result).isNotNull();
     }
+
+    @Test
+    @DisplayName("reflection prompt includes the result and evaluation instruction")
+    void reflectionPromptIncludesResult() throws Exception {
+        var llm = new FakeLLMClient();
+        var agent = new TestAgent(llm);
+        try {
+            llm.respondWith(List.of(
+                new LLMResponse.ToolCall("c1", "returnResult", Map.of("value", "good"))));
+            llm.respondWith("{\"satisfactory\":true,\"reasoning\":\"valid\",\"issues\":[],\"suggestions\":[]}");
+
+            var reflexion = new ReflexionStrategy(
+                new CodeActStrategy(ai.nooa.config.CodeActConfig.defaults()), 2);
+            var call = CurrentCall.fromMethod(
+                TestAgent.class.getDeclaredMethod("generate", String.class),
+                new Object[]{"test"});
+
+            reflexion.execute(agent.runtime(), call);
+
+            assertThat(llm.lastMessages()).anyMatch(message ->
+                message.role().equals("system")
+                    && message.content().contains("Result to evaluate:")
+                    && message.content().contains("good")
+                    && message.content().contains("Return JSON with fields satisfactory"));
+        } finally {
+            agent.close();
+        }
+    }
+
+    @Test
+    @DisplayName("structured critique is included in the next attempt")
+    void structuredCritiqueFeedsNextAttempt() throws Exception {
+        var llm = new FakeLLMClient();
+        var agent = new TestAgent(llm);
+        try {
+            llm.respondWith(List.of(
+                new LLMResponse.ToolCall("c1", "returnResult", Map.of("value", "first"))));
+            llm.respondWith("{\"satisfactory\":false,\"reasoning\":\"needs work\","
+                + "\"issues\":[\"missing detail\"],\"suggestions\":[\"add detail\"]}");
+            llm.respondWith(List.of(
+                new LLMResponse.ToolCall("c2", "returnResult", Map.of("value", "second"))));
+
+            var reflexion = new ReflexionStrategy(
+                new CodeActStrategy(ai.nooa.config.CodeActConfig.defaults()), 2);
+            var call = CurrentCall.fromMethod(
+                TestAgent.class.getDeclaredMethod("generate", String.class),
+                new Object[]{"test"});
+
+            assertThat(reflexion.execute(agent.runtime(), call)).isEqualTo("second");
+            assertThat(agent.runtime().eventManager().all()).anyMatch(event ->
+                event instanceof Event.Feedback feedback
+                    && feedback.content().contains("needs work")
+                    && feedback.content().contains("missing detail")
+                    && feedback.content().contains("add detail"));
+        } finally {
+            agent.close();
+        }
+    }
 }

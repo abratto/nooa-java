@@ -13,7 +13,7 @@ public class ShellDemoAgent extends Agent {
         return java.nio.file.Files.readString(Path.of(path));
     }
 
-    @Generate
+    @Generate(prompt = "Review the provided source file using the helper output. Identify correctness issues and practical improvements without inventing unseen code.")
     public String reviewCode(String filePath) {
         throw new UnsupportedOperationException();
     }

@@ -56,4 +56,25 @@ class ContextManagerTest {
         assertThat(agent.contextManager().allBlocks()).containsKey("key1");
         agent.close();
     }
+
+    @Test
+    @DisplayName("Dynamic blocks render their current expression value")
+    void dynamicBlocksRenderCurrentValue() {
+        var agent = new TestAgent(new FakeLLMClient());
+        agent.context().putDynamic("agent_id", "self.agentId()");
+
+        assertThat(agent.contextManager().render(agent))
+            .contains("<agent_id>\n" + agent.agentId() + "\n</agent_id>");
+        agent.close();
+    }
+
+    @Test
+    @DisplayName("Cannot remove protected blocks")
+    void cannotRemoveProtectedBlocks() {
+        var agent = new TestAgent(new FakeLLMClient());
+
+        assertThatThrownBy(() -> agent.context().remove("state"))
+            .isInstanceOf(IllegalArgumentException.class);
+        agent.close();
+    }
 }

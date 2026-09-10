@@ -95,12 +95,17 @@ class AgentSnapshotTest {
         var llm = new FakeLLMClient();
         var agent = new TestAgent(llm);
         agent.context().put("session", "123");
+        agent.context().putDynamic("agent_id", "self.agentId()");
 
         var snap = AgentSnapshot.take(agent);
+        assertThat(snap.dynamicContextBlocks()).containsEntry("agent_id", "self.agentId()");
         agent.contextManager().remove("session");
+        agent.contextManager().remove("agent_id");
         AgentSnapshot.restoreContext(agent, snap);
 
         assertThat(agent.contextManager().allBlocks()).containsKey("session");
+        assertThat(agent.contextManager().allBlocks().get("agent_id"))
+            .isEqualTo(new ai.nooa.context.ContextBlock.Dynamic("agent_id", "self.agentId()"));
         agent.close();
     }
 }

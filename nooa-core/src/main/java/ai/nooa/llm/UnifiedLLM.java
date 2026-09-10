@@ -8,6 +8,8 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
+import java.lang.reflect.Type;
+import java.lang.reflect.ParameterizedType;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -39,6 +41,8 @@ public class UnifiedLLM {
     private static final String MAX_TOKENS_FIELD = "max_tokens";
     private static final String SYSTEM_ROLE = "system";
     private static final String CONTENT_FIELD = "content";
+    private static final String REASONING_FIELD = "reasoning";
+    private static final String REASONING_CONTENT_FIELD = "reasoning_content";
     private static final String USAGE_FIELD = "usage";
     private static final String MESSAGE_FIELD = "message";
     private static final String ERROR_FIELD = "error";
@@ -60,13 +64,16 @@ public class UnifiedLLM {
         429, 500, 502, 503, 504
     );
 
+    /** Default output budget for Ollama when no explicit max_tokens is set. */
+    private static final int DEFAULT_OLLAMA_NUM_PREDICT = 8192;
+
     private record RetryConfig(int maxRetries, long baseDelayMs, long maxDelayMs) {
         static RetryConfig defaults() {
             return new RetryConfig(3, 1000, 30000);
         }
     }
 
-    public enum Provider { OPENAI, ANTHROPIC }
+    public enum Provider { OPENAI, ANTHROPIC, OLLAMA }
 
     private final RetryConfig retryConfig;
     private final String apiKey;
@@ -147,9 +154,9 @@ public class UnifiedLLM {
     public static ProviderConfig.Builder ollama(String model) {
         return new ProviderConfig.Builder()
             .apiKey("ollama")
-            .baseUrl("http://localhost:11434/v1")
+            .baseUrl("http://localhost:11434")
             .model(model)
-            .provider(Provider.OPENAI);
+            .provider(Provider.OLLAMA);
     }
 
     /** Any OpenAI-compatible endpoint. */
@@ -169,6 +176,15 @@ public class UnifiedLLM {
         Class<?> outputModel,
         Map<String, Object> samplingParams
     ) {
+        return chat(messages, tools, (Type) outputModel, samplingParams);
+    }
+
+    public LLMResponse chat(
+        List<Message> messages,
+        List<Tool> tools,
+        Type outputModel,
+        Map<String, Object> samplingParams
+    ) {
         try {
             return doChat(messages, tools, outputModel, samplingParams);
         } catch (InterruptedException _) {
@@ -183,7 +199,7 @@ public class UnifiedLLM {
     private LLMResponse doChat(
         List<Message> messages,
         List<Tool> tools,
-        Class<?> outputModel,
+        Type outputModel,
         Map<String, Object> samplingParams
     ) throws IOException, InterruptedException {
         ObjectNode body = JSON.createObjectNode();
@@ -197,7 +213,7 @@ public class UnifiedLLM {
     private void configureRequestBody(ObjectNode body,
         List<Message> messages,
         List<Tool> tools,
-        Class<?> outputModel,
+        Type outputModel,
         Map<String, Object> samplingParams) {
         if (provider == Provider.ANTHROPIC) {
             body.put(MAX_TOKENS_FIELD, samplingParams != null && samplingParams.containsKey(MAX_TOKENS_FIELD)
@@ -208,6 +224,10 @@ public class UnifiedLLM {
             if (tools != null && !tools.isEmpty()) {
                 body.set("tools", JSON.valueToTree(tools));
             }
+            return;
+        }
+        if (provider == Provider.OLLAMA) {
+            configureOllamaBody(body, messages, outputModel, samplingParams);
             return;
         }
 
@@ -222,8 +242,66 @@ public class UnifiedLLM {
         applySamplingParams(body, samplingParams);
     }
 
+    /**
+     * Builds Ollama's native {@code /api/chat} body. Ollama ignores the
+     * OpenAI-compatible {@code response_format} field on its {@code /v1/...}
+     * endpoint, so structured output must use the native {@code format:"json"}
+     * flag instead; thinking level is conveyed through {@code options}
+     * ({@code reasoning_effort} / {@code num_predict}) and {@code think} at the
+     * root, per the Ollama API.
+     */
+    private void configureOllamaBody(ObjectNode body, List<Message> messages,
+                                     Type outputModel, Map<String, Object> samplingParams) {
+        body.set("messages", messagesToJson(messages));
+        body.put("stream", false);
+        if (outputModel != null) {
+            body.put("format", "json");
+        }
+        ObjectNode options = body.putObject("options");
+        if (samplingParams != null) {
+            copySampling(samplingParams, TEMPERATURE_FIELD, options, "temperature");
+            copySampling(samplingParams, MAX_TOKENS_FIELD, options, "num_predict");
+            copySampling(samplingParams, TOP_P_FIELD, options, "top_p");
+            if (samplingParams.containsKey(REASONING_EFFORT_FIELD)
+                && samplingParams.get(REASONING_EFFORT_FIELD) != null) {
+                options.put("reasoning_effort", String.valueOf(samplingParams.get(REASONING_EFFORT_FIELD)));
+            }
+        }
+        // Ollama's default num_predict is tiny (128) — far too small for CLAD
+        // artefact generation. Default to a generous budget unless the caller
+        // supplied an explicit max_tokens/num_predict.
+        if (!options.has("num_predict")) {
+            options.put("num_predict", DEFAULT_OLLAMA_NUM_PREDICT);
+        }
+        if (samplingParams != null && samplingParams.containsKey(THINK_FIELD)
+            && samplingParams.get(THINK_FIELD) != null) {
+            Object think = samplingParams.get(THINK_FIELD);
+            body.set(THINK_FIELD, JSON.valueToTree(think));
+        }
+        if (options.isEmpty()) {
+            body.remove("options");
+        }
+    }
+
+    private static void copySampling(Map<String, Object> params, String key,
+                                     ObjectNode target, String targetKey) {
+        if (!params.containsKey(key) || params.get(key) == null) {
+            return;
+        }
+        Object v = params.get(key);
+        if (v instanceof Number n) {
+            target.put(targetKey, key.equals(MAX_TOKENS_FIELD) ? n.intValue() : n.doubleValue());
+        } else {
+            target.put(targetKey, String.valueOf(v));
+        }
+    }
+
     private HttpRequest buildRequest(ObjectNode body) throws JsonProcessingException {
-        String endpoint = provider == Provider.ANTHROPIC ? "/messages" : "/chat/completions";
+        String endpoint = switch (provider) {
+            case ANTHROPIC -> "/messages";
+            case OLLAMA -> "/api/chat";
+            default -> "/chat/completions";
+        };
         String authHeader = provider == Provider.ANTHROPIC ? "x-api-key" : "Authorization";
         String authValue = provider == Provider.ANTHROPIC ? apiKey : "Bearer " + apiKey;
 
@@ -295,10 +373,14 @@ public class UnifiedLLM {
         if (provider == Provider.ANTHROPIC) {
             return parseAnthropicResponse(root);
         }
+        if (provider == Provider.OLLAMA) {
+            return parseOllamaResponse(root);
+        }
         JsonNode choice = root.path("choices").get(0);
         JsonNode msg = choice.path(MESSAGE_FIELD);
 
         String content = msg.path(CONTENT_FIELD).asText(null);
+        String reasoning = reasoningFrom(msg);
         List<LLMResponse.ToolCall> toolCalls = parseToolCalls(msg.path(TOOL_CALLS_FIELD));
         LLMResponse.Usage usage = new LLMResponse.Usage(
             root.path(USAGE_FIELD).path("prompt_tokens").asInt(),
@@ -306,12 +388,25 @@ public class UnifiedLLM {
             root.path(USAGE_FIELD).path("total_tokens").asInt()
         );
 
-        return new LLMResponse(content, toolCalls, usage,
+        return new LLMResponse(content, reasoning, toolCalls, usage,
             root.path(MODEL_FIELD).asText(), choice.path("finish_reason").asText());
+    }
+
+    private LLMResponse parseOllamaResponse(JsonNode root) {
+        JsonNode msg = root.path(MESSAGE_FIELD);
+        String content = msg.path(CONTENT_FIELD).asText(null);
+        String reasoning = reasoningFrom(msg);
+        int promptTokens = root.path("prompt_eval_count").asInt();
+        int completionTokens = root.path("eval_count").asInt();
+        LLMResponse.Usage usage = new LLMResponse.Usage(promptTokens, completionTokens,
+            promptTokens + completionTokens);
+        return new LLMResponse(content, reasoning, List.of(), usage,
+            root.path(MODEL_FIELD).asText(), root.path("done_reason").asText());
     }
 
     private LLMResponse parseAnthropicResponse(JsonNode root) {
         StringBuilder textContent = new StringBuilder();
+        StringBuilder reasoning = new StringBuilder();
         List<LLMResponse.ToolCall> toolCalls = new ArrayList<>();
 
         JsonNode content = root.path(CONTENT_FIELD);
@@ -321,6 +416,9 @@ public class UnifiedLLM {
                 if ("text".equals(type)) {
                     if (!textContent.isEmpty()) textContent.append("\n");
                     textContent.append(block.path("text").asText());
+                } else if ("thinking".equals(type)) {
+                    if (!reasoning.isEmpty()) reasoning.append("\n");
+                    reasoning.append(block.path("thinking").asText());
                 } else if ("tool_use".equals(type)) {
                     JsonNode input = block.path("input");
                     Map<String, Object> args = jsonToMap(input.toString());
@@ -333,6 +431,7 @@ public class UnifiedLLM {
         JsonNode usage = root.path(USAGE_FIELD);
         return new LLMResponse(
             !textContent.isEmpty() ? textContent.toString() : null,
+            !reasoning.isEmpty() ? reasoning.toString() : null,
             toolCalls,
             new LLMResponse.Usage(
                 usage.path("input_tokens").asInt(),
@@ -341,6 +440,14 @@ public class UnifiedLLM {
             root.path(MODEL_FIELD).asText(),
             root.path("stop_reason").asText()
         );
+    }
+
+    private static String reasoningFrom(JsonNode message) {
+        String reasoning = message.path(REASONING_CONTENT_FIELD).asText(null);
+        if (reasoning == null || reasoning.isBlank()) {
+            reasoning = message.path(REASONING_FIELD).asText(null);
+        }
+        return reasoning;
     }
 
     private List<LLMResponse.ToolCall> parseToolCalls(JsonNode toolCallsNode) {
@@ -384,23 +491,42 @@ public class UnifiedLLM {
 
     @SuppressWarnings("deprecation")
     private ObjectNode buildStructuredOutputSchema(Class<?> outputModel) {
+        return buildStructuredOutputSchema((Type) outputModel);
+    }
+
+    @SuppressWarnings("deprecation")
+    private ObjectNode buildStructuredOutputSchema(Type outputModel) {
         ObjectNode schema = JSON.createObjectNode();
         if ("json_schema".equals(System.getProperty("nooa.structured.format"))) {
             schema.put("type", "json_schema");
             ObjectNode jsonSchema = schema.putObject("json_schema");
-            jsonSchema.put("name", outputModel.getSimpleName());
+            jsonSchema.put("name", outputModel.getTypeName().replace('.', '_'));
             jsonSchema.put("strict", true);
             try {
-                var schemaGen = JSON.generateJsonSchema(outputModel);
-                jsonSchema.set("schema", JSON.valueToTree(schemaGen));
+                jsonSchema.set("schema", schemaFor(outputModel));
             } catch (JsonProcessingException e) {
-                log.warn("Could not generate JSON schema for {}", outputModel.getName(), e);
+                log.warn("Could not generate JSON schema for {}", outputModel.getTypeName(), e);
                 jsonSchema.put("schema", "{}");
             }
         } else {
             schema.put("type", "json_object");
         }
         return schema;
+    }
+
+    private JsonNode schemaFor(Type type) throws JsonProcessingException {
+        if (type instanceof Class<?> clazz) {
+            return JSON.valueToTree(JSON.generateJsonSchema(clazz));
+        }
+        if (type instanceof ParameterizedType parameterized
+            && parameterized.getRawType() instanceof Class<?> raw
+            && java.util.Collection.class.isAssignableFrom(raw)
+            && parameterized.getActualTypeArguments().length == 1) {
+            ObjectNode array = JSON.createObjectNode().put("type", "array");
+            array.set("items", schemaFor(parameterized.getActualTypeArguments()[0]));
+            return array;
+        }
+        return JSON.createObjectNode().put("type", "object");
     }
 
     private ArrayNode messagesToJsonAnthropic(List<Message> messages) {

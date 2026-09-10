@@ -34,7 +34,8 @@ public class LegalIntakeAgent extends Agent {
         };
     }
 
-    @Generate @Strategy(PredictStrategy.class)
+    @Generate(prompt = "Classify the matter and return JSON with category, urgency, nextStep, and a one-sentence summary. Do not provide legal advice or definitive conclusions.")
+    @Strategy(PredictStrategy.class)
     public LegalIntakeResult handle(String message) { throw new UnsupportedOperationException(); }
 
     public LegalIntakeResult handleStructured(String message) {

@@ -8,6 +8,9 @@ import java.lang.annotation.Target;
 
 /**
  * Overrides the default generation strategy for a {@code @Generate} method.
+ * The strategy class must provide an accessible no-argument constructor;
+ * configure the agent-level default strategy when constructor arguments
+ * are required.
  *
  * <pre>{@code
  * &#64;Generate

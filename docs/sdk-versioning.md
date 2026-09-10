@@ -6,8 +6,6 @@ This repository is the canonical source for the NOOA Java SDK. The versioning po
 
 This policy applies to the Java SDK in this repository, including the core framework runtime and its published Maven artifacts.
 
-It does not define release policy for CLAD-specific methodology repos or downstream CLAD-based applications, which may adopt their own release rules.
-
 ## SemVer baseline
 
 The SDK follows Semantic Versioning:
@@ -23,7 +21,7 @@ The repository uses Maven versions in the form:
 
 Example:
 
-- `0.3.0-SNAPSHOT` = current in-progress development
+- `0.4.0` = current release branch
 - `v0.3.0` = tagged release for the corresponding artifact version
 
 ## Source-of-truth model
@@ -35,7 +33,6 @@ The practical rule is:
 - the Java SDK source lives here
 - the published artifact coordinates are built here
 - the release tag and changelog are aligned here
-- CLAD methodology and CLAD-specific application code remain separate
 
 ## Snapshot policy
 
@@ -87,7 +84,7 @@ Example:
 <dependency>
   <groupId>ai.nooa</groupId>
   <artifactId>nooa-core</artifactId>
-  <version>0.3.0</version>
+  <version>0.4.0</version>
 </dependency>
 ```
 

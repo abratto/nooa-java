@@ -1,7 +1,9 @@
 package ai.nooa.runtime;
 
 import ai.nooa.Agent;
+import ai.nooa.annotations.NoTrace;
 import ai.nooa.annotations.Generate;
+import ai.nooa.config.AgentConfig;
 import ai.nooa.context.Event;
 import ai.nooa.llm.FakeLLMClient;
 import ai.nooa.llm.Tool;
@@ -9,11 +11,15 @@ import ai.nooa.llm.UnifiedLLM;
 import ai.nooa.strategy.CurrentCall;
 import ai.nooa.strategy.GenerationStrategy;
 import ai.nooa.strategy.RuntimeServices;
+import ai.nooa.runtime.CallMiddleware;
+import ai.nooa.runtime.sandbox.SandboxExecutor;
 import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.nio.file.Files;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -22,7 +28,9 @@ class ActorRuntimeTest {
 
     static class TestAgent extends Agent {
         public TestAgent(UnifiedLLM llm) { super(llm); }
+        public TestAgent(UnifiedLLM llm, AgentConfig config) { super(llm, config); }
         @Generate public String generate(String x) { throw new UnsupportedOperationException(); }
+        @Generate @NoTrace public String untraced(String x) { throw new UnsupportedOperationException(); }
     }
 
     private FakeLLMClient llm;
@@ -78,6 +86,45 @@ class ActorRuntimeTest {
 
         assertThat(agent.eventManager().all().stream().anyMatch(e -> e instanceof Event.PromptBuilt))
             .isTrue();
+    }
+
+    @Test
+    @DisplayName("callPlan honors tracing configuration and @NoTrace")
+    void callPlanHonorsTracingConfigurationAndNoTrace() throws Exception {
+        var traceDir = Files.createTempDirectory("nooa-actor-trace");
+        try {
+            ai.nooa.tracing.Tracing.enable(ai.nooa.tracing.Tracing.jsonl(traceDir));
+            var strategy = new GenerationStrategy() {
+                public Object execute(RuntimeServices rt, CurrentCall call) {
+                    return "done";
+                }
+            };
+
+            var noTraceCall = CurrentCall.fromMethod(
+                TestAgent.class.getDeclaredMethod("untraced", String.class),
+                new Object[]{"test"});
+            agent.runtime().callPlan(strategy, noTraceCall);
+            ai.nooa.tracing.Tracing.shutdown();
+            assertThat(Files.exists(traceDir.resolve("traces.jsonl"))).isFalse();
+
+            var disabledAgent = new TestAgent(llm, AgentConfig.defaults().withTracing(false));
+            try {
+                var tracedCall = CurrentCall.fromMethod(
+                    TestAgent.class.getDeclaredMethod("generate", String.class),
+                    new Object[]{"test"});
+                disabledAgent.runtime().callPlan(strategy, tracedCall);
+            } finally {
+                disabledAgent.close();
+            }
+        } finally {
+            ai.nooa.tracing.Tracing.shutdown();
+            try (var files = Files.walk(traceDir)) {
+                files.sorted(java.util.Comparator.reverseOrder())
+                    .forEach(path -> {
+                        try { Files.deleteIfExists(path); } catch (Exception ignored) { }
+                    });
+            }
+        }
     }
 
     @Test
@@ -181,5 +228,103 @@ class ActorRuntimeTest {
         var result = agent.runtime().executeCode("int x = nonexistent();", Map.of());
         assertThat(result.success()).isFalse();
         assertThat(result.error()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("executeCode uses a configured sandbox executor")
+    void executeCodeUsesConfiguredSandboxExecutor() {
+        var executedCode = new java.util.concurrent.atomic.AtomicReference<String>();
+        var boundName = new java.util.concurrent.atomic.AtomicReference<String>();
+        var closed = new AtomicBoolean();
+        SandboxExecutor executor = new SandboxExecutor() {
+            @Override public void bindVariable(String name, String typeName, Object value) {
+                boundName.set(name);
+            }
+
+            @Override public ai.nooa.strategy.ExecutionResult execute(String code) {
+                executedCode.set(code);
+                return ai.nooa.strategy.ExecutionResult.ofValue("injected");
+            }
+
+            @Override public void close() {
+                closed.set(true);
+            }
+        };
+        var configured = new TestAgent(llm,
+            AgentConfig.defaults().withSandboxExecutor(ignored -> executor));
+        try {
+            configured.runtime().bindVariable("input", "String", "value");
+            var result = configured.runtime().executeCode("returnResult(input);", Map.of());
+            assertThat(result.returnValue()).isEqualTo("injected");
+            assertThat(executedCode).hasValue("returnResult(input);");
+            assertThat(boundName).hasValue("input");
+        } finally {
+            configured.close();
+        }
+        assertThat(closed).isTrue();
+    }
+
+    @Test
+    void middlewareCanRewriteAndRejectOperationRequests() {
+        var rewrite = new CallMiddleware() {
+            @Override public LlmRequest beforeLlmRequest(Agent agent, LlmRequest request) {
+                return request.withSamplingParams(Map.of("temperature", 0.0));
+            }
+            @Override public CodeRequest beforeCodeRequest(Agent agent, CodeRequest request) {
+                return request.withCode("int rewritten = 1;");
+            }
+        };
+        var configured = new TestAgent(llm, AgentConfig.defaults().withMiddleware(rewrite));
+        try {
+            llm.respondWith("ok");
+            assertThat(configured.runtime().generate(List.of(), null, Map.of())
+                .content()).isEqualTo("ok");
+            assertThat(configured.runtime().executeCode("int original = 1;", Map.of()).success())
+                .isTrue();
+        } finally {
+            configured.close();
+        }
+    }
+
+    @Test
+    @DisplayName("middleware wraps LLM and code operations")
+    void middlewareWrapsOperations() {
+        var beforeLlm = new AtomicInteger();
+        var afterLlm = new AtomicInteger();
+        var beforeCode = new AtomicInteger();
+        var afterCode = new AtomicInteger();
+        var hook = new CallMiddleware() {
+            @Override public void beforeLlm(Agent agent, List<ai.nooa.llm.Message> messages,
+                                             List<Tool> tools, Map<String, Object> params) {
+                beforeLlm.incrementAndGet();
+            }
+            @Override public ai.nooa.llm.LLMResponse afterLlm(
+                Agent agent, ai.nooa.llm.LLMResponse response) {
+                afterLlm.incrementAndGet();
+                return response;
+            }
+            @Override public String beforeCode(Agent agent, String code) {
+                beforeCode.incrementAndGet();
+                return code;
+            }
+            @Override public ai.nooa.strategy.ExecutionResult afterCode(
+                Agent agent, ai.nooa.strategy.ExecutionResult result) {
+                afterCode.incrementAndGet();
+                return result;
+            }
+        };
+        var configured = new TestAgent(llm, AgentConfig.defaults().withMiddleware(hook));
+        try {
+            llm.respondWith("ok");
+            configured.runtime().generate(List.of(), null, Map.of());
+            configured.runtime().executeCode("int x = 1;", Map.of());
+        } finally {
+            configured.close();
+        }
+
+        assertThat(beforeLlm).hasValue(1);
+        assertThat(afterLlm).hasValue(1);
+        assertThat(beforeCode).hasValue(1);
+        assertThat(afterCode).hasValue(1);
     }
 }

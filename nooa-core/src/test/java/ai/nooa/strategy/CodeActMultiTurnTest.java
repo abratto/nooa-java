@@ -1,6 +1,7 @@
 package ai.nooa.strategy;
 
 import ai.nooa.Agent;
+import ai.nooa.AgentFactory;
 import ai.nooa.annotations.Generate;
 import ai.nooa.config.CodeActConfig;
 import ai.nooa.context.Event;
@@ -11,11 +12,41 @@ import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.*;
 
 @DisplayName("CodeActStrategy — Multi-turn")
 class CodeActMultiTurnTest {
+
+    public static class NestedAgent extends Agent {
+        public NestedAgent(ai.nooa.llm.UnifiedLLM llm) { super(llm); }
+
+        @Generate
+        public String outer() { throw new UnsupportedOperationException(); }
+
+        @Generate
+        public String inner() { throw new UnsupportedOperationException(); }
+    }
+
+    @Test
+    @DisplayName("nested generated calls reuse the active generation session")
+    void nestedGeneratedCallDoesNotDeadlock() throws Exception {
+        var llm = new FakeLLMClient();
+        llm.respondWith(List.of(new LLMResponse.ToolCall("outer", "executeJava",
+            Map.of("code", "returnResult(__agent__.inner());"))));
+        llm.respondWith("inner-result");
+        var agent = AgentFactory.create(NestedAgent.class, llm);
+
+        Object result;
+        try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+            result = executor.submit(agent::outer).get(5, TimeUnit.SECONDS);
+        }
+
+        assertThat(result).isEqualTo("inner-result");
+        assertThat(llm.callCount()).isEqualTo(2);
+        agent.close();
+    }
 
     static class TestAgent extends Agent {
         public TestAgent(UnifiedLLM llm) { super(llm); }

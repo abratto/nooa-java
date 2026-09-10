@@ -23,16 +23,16 @@ import org.slf4j.LoggerFactory;
  * Wraps {@code jdk.jshell.JShell} to execute LLM-generated Java code
  * with timeout and import restrictions.
  */
-public final class JShellSandbox implements AutoCloseable {
+public final class JShellSandbox implements SandboxExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(JShellSandbox.class);
 
     private static final Set<String> BLOCKED_PACKAGES = Set.of(
         "java.lang.reflect", "java.lang.invoke", "sun.",
         "jdk.internal", "java.lang.ProcessBuilder", "java.lang.Runtime",
-        "java.io.File", "java.nio.file", "java.net.Socket",
+        "java.lang.ClassLoader", "java.io.File", "java.nio.file", "java.net.Socket",
         "java.lang.System", "java.net.URL", "java.net.URI",
-        "java.lang.Class.forName", "java.lang.Thread"
+        "java.lang.Class.forName", "java.lang.Thread", "javax.script"
     );
 
     private static final long DEFAULT_TIMEOUT_MS = 30_000;
@@ -142,13 +142,19 @@ public final class JShellSandbox implements AutoCloseable {
         try {
             return executeWithTimeout(code);
         } catch (TimeoutException _) {
+            try {
+                jshell.stop();
+            } catch (Exception e) {
+                log.debug("Unable to stop timed-out JShell execution", e);
+            }
             return new ExecutionResult("", "", "Execution timed out after " + timeoutMs + "ms",
                 null, false, false);
         }
     }
 
     private ExecutionResult executeWithTimeout(String code) throws TimeoutException {
-        try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
             Future<ExecutionResult> future = executor.submit(() -> {
                 List<SnippetEvent> events = jshell.eval(code);
                 return buildResult(events);
@@ -162,7 +168,12 @@ public final class JShellSandbox implements AutoCloseable {
             } catch (java.util.concurrent.ExecutionException e) {
                 return new ExecutionResult("", "",
                     e.getCause() != null ? e.getCause().getMessage() : e.getMessage(), null, false, false);
+            } catch (TimeoutException e) {
+                future.cancel(true);
+                throw e;
             }
+        } finally {
+            executor.shutdownNow();
         }
     }
 
@@ -226,8 +237,24 @@ public final class JShellSandbox implements AutoCloseable {
         if (blocked.startsWith("java.io.File") || blocked.startsWith("java.nio.file")) {
             return isFileAccessAllowed(code, perms);
         }
+        if (blocked.startsWith("java.lang.reflect") || blocked.startsWith("java.lang.invoke")
+            || blocked.startsWith("java.lang.ClassLoader")) {
+            return isClassLoadAllowed(code, perms);
+        }
         if (blocked.equals("java.net.URL") || blocked.equals("java.net.URI")) {
             return isUrlAccessAllowed(code, perms);
+        }
+        return false;
+    }
+
+    private boolean isClassLoadAllowed(String code, ai.nooa.security.Permissions perms) {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(
+            "(?:import\\s+|new\\s+|\\()([a-zA-Z_$][\\w$]*(?:\\.[a-zA-Z_$][\\w$]*)+)").matcher(code);
+        while (matcher.find()) {
+            if (perms.checkClassLoad(matcher.group(1))
+                == ai.nooa.security.Permissions.Level.ALLOW) {
+                return true;
+            }
         }
         return false;
     }

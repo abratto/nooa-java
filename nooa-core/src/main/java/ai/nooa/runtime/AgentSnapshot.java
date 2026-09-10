@@ -30,10 +30,18 @@ public final class AgentSnapshot {
         String agentId,
         Instant createdAt,
         List<Map<String, Object>> events,
-        Map<String, String> contextBlocks,
+        Map<String, Object> contextBlocks,
+        Map<String, String> dynamicContextBlocks,
         Map<String, String> instanceValues,
         String model
-    ) {}
+    ) {
+        public Snapshot {
+            contextBlocks = contextBlocks == null ? Map.of()
+                : Collections.unmodifiableMap(new LinkedHashMap<>(contextBlocks));
+            dynamicContextBlocks = dynamicContextBlocks == null ? Map.of()
+                : Collections.unmodifiableMap(new LinkedHashMap<>(dynamicContextBlocks));
+        }
+    }
 
     /** Take a snapshot of the current agent state. */
     public static Snapshot take(Agent agent) {
@@ -42,9 +50,14 @@ public final class AgentSnapshot {
             eventList.add(serializeEvent(e));
         }
 
-        Map<String, String> blocks = new LinkedHashMap<>();
+        Map<String, Object> blocks = new LinkedHashMap<>();
+        Map<String, String> dynamicBlocks = new LinkedHashMap<>();
         for (var entry : agent.contextManager().allBlocks().entrySet()) {
             if (entry.getValue() instanceof ContextBlock.Static s) {
+                blocks.put(entry.getKey(), s.value());
+            } else if (entry.getValue() instanceof ContextBlock.Dynamic d) {
+                dynamicBlocks.put(entry.getKey(), d.expression());
+            } else if (entry.getValue() instanceof ContextBlock.Structured s) {
                 blocks.put(entry.getKey(), s.value());
             }
         }
@@ -58,6 +71,7 @@ public final class AgentSnapshot {
             Instant.now(),
             eventList,
             blocks,
+            dynamicBlocks,
             fields,
             agent.llm().model()
         );
@@ -103,9 +117,16 @@ public final class AgentSnapshot {
                 // protected block — skip
             }
         }
+        for (var entry : snapshot.dynamicContextBlocks().entrySet()) {
+            try {
+                agent.contextManager().putDynamic(entry.getKey(), entry.getValue());
+            } catch (IllegalArgumentException ignored) {
+                // protected block — skip
+            }
+        }
     }
 
-    private static Map<String, Object> serializeEvent(Event e) {
+    static Map<String, Object> serializeEvent(Event e) {
         var map = new LinkedHashMap<String, Object>();
         map.put("type", e.getClass().getSimpleName());
         map.put("id", e.id().toString());

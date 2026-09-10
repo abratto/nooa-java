@@ -4,7 +4,12 @@ import ai.nooa.context.Event;
 import ai.nooa.llm.Message;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,9 +24,18 @@ public final class EventManager {
 
     private final List<Event> events = new CopyOnWriteArrayList<>();
     private final List<Consumer<Event>> listeners = new CopyOnWriteArrayList<>();
+    private record Scope(int start, UUID callId) {}
+
+    private final ThreadLocal<Deque<Scope>> scopeStarts =
+        ThreadLocal.withInitial(ArrayDeque::new);
+    private final Map<UUID, UUID> eventCallIds = new ConcurrentHashMap<>();
 
     public void add(Event event) {
         events.add(event);
+        Deque<Scope> scopes = scopeStarts.get();
+        if (!scopes.isEmpty()) {
+            eventCallIds.put(event.id(), scopes.peek().callId());
+        }
         for (Consumer<Event> listener : listeners) {
             try {
                 listener.accept(event);
@@ -46,8 +60,53 @@ public final class EventManager {
         return events.size();
     }
 
+    /** Start a nested view containing events added after this point. */
+    public void beginScope() {
+        beginScope(UUID.randomUUID());
+    }
+
+    public void beginScope(UUID callId) {
+        scopeStarts.get().push(new Scope(events.size(), callId));
+    }
+
+    /** End the current nested event view. */
+    public void endScope() {
+        Deque<Scope> scopes = scopeStarts.get();
+        if (!scopes.isEmpty()) {
+            scopes.pop();
+        }
+        if (scopes.isEmpty()) {
+            scopeStarts.remove();
+        }
+    }
+
+    /** Events emitted since the current call scope began. */
+    public List<Event> current() {
+        Deque<Scope> scopes = scopeStarts.get();
+        return scopes.isEmpty() ? all() : since(scopes.peek().start());
+    }
+
+    public UUID currentCallId() {
+        Deque<Scope> scopes = scopeStarts.get();
+        return scopes.isEmpty() ? null : scopes.peek().callId();
+    }
+
+    public UUID callId(Event event) {
+        return eventCallIds.get(event.id());
+    }
+
+    public List<Event> forCall(UUID callId) {
+        if (callId == null) {
+            return List.of();
+        }
+        return events.stream()
+            .filter(event -> callId.equals(eventCallIds.get(event.id())))
+            .toList();
+    }
+
     public void clear() {
         events.clear();
+        eventCallIds.clear();
     }
 
     /** Clear events in range [from, to). */
@@ -57,6 +116,7 @@ public final class EventManager {
         snapshot.subList(from, to).clear();
         events.clear();
         events.addAll(snapshot);
+        eventCallIds.keySet().retainAll(snapshot.stream().map(Event::id).toList());
     }
 
     /** Insert an event at a specific index. */
@@ -65,6 +125,7 @@ public final class EventManager {
         snapshot.add(index, event);
         events.clear();
         events.addAll(snapshot);
+        eventCallIds.keySet().retainAll(snapshot.stream().map(Event::id).toList());
     }
 
     public void onEvent(Consumer<Event> listener) {

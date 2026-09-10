@@ -9,6 +9,6 @@ import ai.nooa.llm.UnifiedLLM;
 public class GreetingAgent extends Agent {
     public GreetingAgent(UnifiedLLM llm) { super(llm); }
 
-    @Generate
+    @Generate(prompt = "Write exactly 3 lines in haiku style. Mention the provided name once. No extra commentary, markdown, or explanation.")
     public String greet(String name) { throw new UnsupportedOperationException(); }
 }

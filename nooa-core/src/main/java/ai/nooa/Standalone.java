@@ -68,7 +68,11 @@ public final class Standalone {
         if (ann != null) {
             try {
                 return ann.value().getDeclaredConstructor().newInstance();
-            } catch (Exception ignored) {}
+            } catch (ReflectiveOperationException e) {
+                throw new NooaException(
+                    "@Strategy " + ann.value().getName()
+                        + " must provide an accessible no-argument constructor", e);
+            }
         }
         return new CodeActStrategy(ai.nooa.config.CodeActConfig.defaults());
     }

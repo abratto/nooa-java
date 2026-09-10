@@ -13,6 +13,7 @@ record SentimentResult(String sentiment, double confidence, String reasoning) {}
 public class SentimentAgent extends Agent {
     public SentimentAgent(UnifiedLLM llm) { super(llm); }
 
-    @Generate @Strategy(PredictStrategy.class)
+    @Generate(prompt = "Analyze the text and return valid JSON with sentiment, confidence, and one short reasoning sentence.")
+    @Strategy(PredictStrategy.class)
     public SentimentResult analyze(String text) { throw new UnsupportedOperationException(); }
 }

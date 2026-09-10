@@ -4,6 +4,7 @@ import ai.nooa.Agent;
 import ai.nooa.annotations.Generate;
 import ai.nooa.llm.FakeLLMClient;
 import ai.nooa.llm.UnifiedLLM;
+import ai.nooa.security.Permissions;
 import org.junit.jupiter.api.*;
 
 
@@ -52,6 +53,18 @@ class JShellSandboxTest {
     }
 
     @Test
+    @DisplayName("binds typed inputs and returns explicit values")
+    void bindsInputsAndReturnsExplicitValues() {
+        sandbox.bindVariable("input", "String", "hello");
+
+        var result = sandbox.execute("returnResult(input.toUpperCase());");
+
+        assertThat(result.success()).isTrue();
+        assertThat(result.explicitReturn()).isTrue();
+        assertThat(result.returnValue()).isEqualTo("HELLO");
+    }
+
+    @Test
     @DisplayName("error on division by zero — but JShell may reject at parse time")
     void divisionByZero() {
         var result = sandbox.execute("int x = 1 / 0;");
@@ -71,6 +84,23 @@ class JShellSandboxTest {
     void returnsExpressionValue() {
         var result = sandbox.execute("42");
         assertThat(result.success()).isTrue();
+    }
+
+    @Test
+    @DisplayName("timeout returns without waiting for the worker")
+    void timeoutReturnsPromptly() {
+        sandbox.close();
+        var agent = new TestAgent(new FakeLLMClient());
+        sandbox = new JShellSandbox(agent, 50);
+
+        long startedAt = System.nanoTime();
+        var result = sandbox.execute("Thread.sleep(1000);");
+        long elapsedMillis = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
+            System.nanoTime() - startedAt);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.error()).contains("timed out");
+        assertThat(elapsedMillis).isLessThan(500);
     }
 
     @Test
@@ -100,9 +130,31 @@ class JShellSandboxTest {
     }
 
     @Test
+    @DisplayName("permission rules can explicitly allow a blocked file API")
+    void allowsFileApiWhenPermissionIsGranted() {
+        var agent = new TestAgent(new FakeLLMClient());
+        agent.setPermissions(new Permissions()
+            .file("/tmp/**", Permissions.Level.ALLOW));
+        sandbox.close();
+        sandbox = new JShellSandbox(agent, 5000);
+
+        var result = sandbox.execute("new java.io.File(\"/tmp/nooa-test\");");
+
+        assertThat(result.success()).isTrue();
+        assertThat(result.error()).isNull();
+        agent.close();
+    }
+
+    @Test
     @DisplayName("close cleans up resources")
     void closeCleansUp() {
+        SandboxContext.setAgent(new TestAgent(new FakeLLMClient()));
+        SandboxContext.setVariable("stale", "value");
+        SandboxContext.setReturnValue("stale");
         sandbox.close();
         assertThatCode(sandbox::close).doesNotThrowAnyException();
+        assertThat(SandboxContext.getAgent()).isNull();
+        assertThat(SandboxContext.getVariable("stale")).isNull();
+        assertThat(SandboxContext.consumeReturnValue()).isNull();
     }
 }

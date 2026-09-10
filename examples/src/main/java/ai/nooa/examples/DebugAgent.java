@@ -12,6 +12,6 @@ public class DebugAgent extends Agent {
     void setFocus(String topic) { context().put("focus", "Priority: " + topic); }
     void clearFocus() { context().remove("focus"); }
 
-    @Generate
+    @Generate(prompt = "Identify likely root causes, list the most probable next checks in order, and keep the answer concise and practical. Use only the issue and current focus.")
     public String analyze(String issue) { throw new UnsupportedOperationException(); }
 }

@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.4.0 (2026-09-10)
+
+### Added
+- Interactive turn protocol with typed turn results and queue-preserving dispatch
+- Durable session snapshots for events and structured context values
+- Skill activation registry, operation-level middleware hooks, and typed validation and restricted-code errors
+- Structured context rendering with bounded output
+- Pluggable `SandboxExecutor` SPI for host-provided process, container, VM, or remote isolation backends
+
+### Documentation
+- Added an agent-building guide covering service, interactive, worker, skill, middleware, context, and testing patterns
+- Added a package reference with strategy/configuration guidance and explicit sandbox audit limits
+- Added sandbox regression coverage for execution lifecycle, permissions, bindings, returns, and shared context cleanup
+
+### Changed
+- Documented parity with the original NOOA framework is limited to the Java-supported capability subset; Java remains synchronous and JVM-native
+- Removed the unused Micronaut integration and legacy CLAD runtime modules from the SDK reactor
+
+### Validation
+- `nooa-core` and the Maven reactor pass the Java test suite
+- The downstream `clad-agent` consumer builds and tests against the installed `nooa-core` release artifact
+
 ## v0.3.0 (2026-08-14)
 
 ### Added

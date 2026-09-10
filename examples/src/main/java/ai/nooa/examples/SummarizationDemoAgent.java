@@ -13,7 +13,7 @@ public class SummarizationDemoAgent extends Agent {
         summarizer.install();
     }
 
-    @Generate
+    @Generate(prompt = "Respond helpfully to the message while keeping the conversation concise and allowing the installed token-budget summarizer to manage context.")
     public String chat(String message) {
         throw new UnsupportedOperationException();
     }

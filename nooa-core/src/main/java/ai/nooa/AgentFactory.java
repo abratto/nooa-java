@@ -83,10 +83,11 @@ public final class AgentFactory {
     private static Class<?> createInstrumented(Class<?> agentClass) {
         log.info("Instrumenting agent class: {}", agentClass.getName());
 
-        // Capture Javadoc for @Generate methods (not available at runtime via reflection)
+        // Capture explicit runtime prompts. Java Javadoc is not available
+        // through reflection, so Generate.prompt is the source of truth.
         for (Method m : agentClass.getDeclaredMethods()) {
             if (m.isAnnotationPresent(Generate.class)) {
-                MethodDocStore.put(m, extractJavadoc(m));
+                MethodDocStore.put(m, extractPrompt(m));
             }
         }
 
@@ -146,13 +147,16 @@ public final class AgentFactory {
         return true;
     }
 
-    private static String extractJavadoc(Method method) {
-        // Javadoc is not available via reflection at runtime.
-        // This method captures whatever comment is accessible at build time.
-        // In practice, users run with -parameters and we parse source, or
-        // they use a @Prompt annotation as a fallback.
-        //
-        // For now, return the method name + parameter names as a minimal prompt.
+    private static String extractPrompt(Method method) {
+        String prompt = method.getAnnotation(Generate.class).prompt().strip();
+        if (!prompt.isEmpty()) {
+            return prompt;
+        }
+
+        log.warn("@Generate method {}.{} has no runtime prompt; using its signature. "
+                + "Set @Generate(prompt = \"...\") to provide the model instruction.",
+            method.getDeclaringClass().getName(), method.getName());
+
         String name = method.getName();
         String params = Arrays.stream(method.getParameters())
             .map(p -> p.getType().getSimpleName() + " " + p.getName())
@@ -203,13 +207,18 @@ public final class AgentFactory {
         }
 
         private static GenerationStrategy resolveStrategy(Method method, Agent agent) {
+            GenerationStrategy configured = agent.config().strategyFor(method);
+            if (configured != null) {
+                return configured;
+            }
             Strategy strategyAnn = method.getAnnotation(Strategy.class);
             if (strategyAnn != null) {
                 try {
                     return strategyAnn.value().getDeclaredConstructor().newInstance();
                 } catch (ReflectiveOperationException e) {
-                    log.warn("Failed to instantiate strategy {}: {}",
-                        strategyAnn.value().getName(), e.getMessage());
+                    throw new NooaException(
+                        "@Strategy " + strategyAnn.value().getName()
+                            + " must provide an accessible no-argument constructor", e);
                 }
             }
             return agent.config().defaultStrategy();

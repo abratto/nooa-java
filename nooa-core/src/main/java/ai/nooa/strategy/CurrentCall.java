@@ -9,24 +9,29 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.UUID;
 
 /**
  * Captures the context of a single {@code @Generate} method invocation:
- * the method, its arguments, return type, and the docstring (prompt).
+ * the method, its arguments, return type, and the runtime prompt.
  */
 public final class CurrentCall {
 
     private final Method method;
+    private final UUID callId;
     private final Object[] args;
     private final Map<String, Object> namedArgs;
+    private final Type genericReturnType;
     private final Class<?> returnType;
     private final String docstring;
 
     private CurrentCall(Method method, Object[] args, Map<String, Object> namedArgs) {
         this.method = method;
+        this.callId = UUID.randomUUID();
         this.args = args.clone();
         this.namedArgs = namedArgs;
-        this.returnType = unwrapCompletableFuture(method);
+        this.genericReturnType = unwrapCompletableFuture(method);
+        this.returnType = rawType(genericReturnType);
         this.docstring = extractDocstring(method);
     }
 
@@ -34,19 +39,29 @@ public final class CurrentCall {
      * If the method return type is CompletableFuture&lt;T&gt;, extract T.
      * Otherwise return the raw return type.
      */
-    private static Class<?> unwrapCompletableFuture(Method method) {
+    private static Type unwrapCompletableFuture(Method method) {
         Class<?> raw = method.getReturnType();
         if (!CompletableFuture.class.isAssignableFrom(raw)) {
-            return raw;
+            return method.getGenericReturnType();
         }
         Type generic = method.getGenericReturnType();
         if (generic instanceof ParameterizedType pt) {
             Type[] args = pt.getActualTypeArguments();
-            if (args.length == 1 && args[0] instanceof Class<?> c) {
-                return c;
+            if (args.length == 1) {
+                return args[0];
             }
         }
-        return Object.class; // fallback for raw CompletableFuture
+        return Object.class;
+    }
+
+    private static Class<?> rawType(Type type) {
+        if (type instanceof Class<?> c) {
+            return c;
+        }
+        if (type instanceof ParameterizedType pt && pt.getRawType() instanceof Class<?> c) {
+            return c;
+        }
+        return Object.class;
     }
 
     public static CurrentCall fromMethod(Method method, Object[] args) {
@@ -62,9 +77,11 @@ public final class CurrentCall {
     }
 
     public Method method() { return method; }
+    public UUID callId() { return callId; }
     public Object[] args() { return args.clone(); }
     public Map<String, Object> namedArgs() { return namedArgs; }
     public Class<?> returnType() { return returnType; }
+    public Type genericReturnType() { return genericReturnType; }
     public String docstring() { return docstring; }
 
     public String userPrompt(boolean includeArgs, int maxArgChars) {
@@ -94,10 +111,9 @@ public final class CurrentCall {
     }
 
     private static String extractDocstring(Method method) {
-        // Javadoc is not available at runtime via reflection in standard Java.
-        // The AgentFactory captures the method's Javadoc at instrumentation time
-        // and stores it in a metadata map. If not available, fall back to
-        // the method name + parameters as a description.
+        // Java Javadoc is not available at runtime through standard reflection.
+        // AgentFactory stores Generate.prompt; older methods without an
+        // explicit prompt fall back to their method name and parameters.
         String docs = MethodDocStore.get(method);
         if (docs != null && !docs.isBlank()) {
             return docs.strip();
