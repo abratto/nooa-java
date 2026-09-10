@@ -11,6 +11,7 @@ public final class QuickstartAdvanced {
         var researcher = AgentFactory.create(ResearchAgent.class, llm);
         System.out.println("Pattern: helper methods = tools, @Generate method = model capability");
         System.out.println("The model can use search() and getCurrentTime() while producing the answer.");
+        System.out.println(researcher.research("What should I know about virtual threads?"));
         researcher.close();
 
         System.out.println("\n=== Example 07: Dynamic Context Blocks ===");
@@ -20,6 +21,7 @@ public final class QuickstartAdvanced {
         pm.completeTask("Write docs");
         System.out.println("Status: " + pm.formatProjectStatus());
         System.out.println("Pattern: business state is kept in Java; the model sees a compact status summary.");
+        System.out.println(pm.planDay());
         pm.close();
 
         System.out.println("\n=== Example 08: Context Blocks ===");
@@ -27,6 +29,7 @@ public final class QuickstartAdvanced {
         debugger.setFocus("memory leak in auth module");
         System.out.println("Context blocks: " + debugger.contextManager().allBlocks().keySet());
         System.out.println("Pattern: runtime context guides the model without making all state visible as raw fields.");
+        System.out.println(debugger.analyze("Requests become slower after several hours."));
         debugger.close();
 
         System.out.println("\nAll advanced examples instantiated successfully.");

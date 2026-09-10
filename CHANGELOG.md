@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.5.0 (2026-09-10)
+
+### Added
+- Focused runnable examples for strategies, tracing, summarization, snapshots, shell tools, memory, and MCP
+- Deterministic example smoke tests covering factory instrumentation and Java-owned state
+- Prompt engineering guide documenting prompt assembly, method metadata, context blocks, events, and strategy-specific instructions
+
+### Changed
+- Refactored aggregate example launchers into clear, independently runnable demos while preserving compatibility entry points
+- Corrected README guidance for `@Hidden`, runtime prompts, AgentDoc visibility, tracing, and typed memory relationships
+- Documented the `0.5.0` Maven coordinates for downstream consumers
+
+### Validation
+- `mvn test` passes across the reactor
+- `git diff --check` passes
+
 ## v0.4.0 (2026-09-10)
 
 ### Added

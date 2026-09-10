@@ -24,6 +24,8 @@ For the formal SDK release and compatibility policy, see [docs/sdk-versioning.md
 For the staged plan to harden CodeAct permission checks, see [docs/roadmap.md](docs/roadmap.md).
 For guidance on choosing runtime shapes and using sessions, skills, middleware, and
 typed failures, see [docs/agent-building-guide.md](docs/agent-building-guide.md).
+For a concrete explanation of prompt assembly and prompt design, see
+[docs/prompt-engineering.md](docs/prompt-engineering.md).
 For the `nooa-core` package map, strategy/configuration guidance, and current audit
 limits, see [docs/package-reference.md](docs/package-reference.md).
 
@@ -49,11 +51,14 @@ System.out.println(greeting);
 
 **Requirements:** Java 25+ · Maven 3.9+
 
+For runnable examples covering strategies, tracing, memory, MCP, snapshots, and
+Java-owned orchestration, see [examples/README.md](examples/README.md).
+
 ```xml
 <dependency>
   <groupId>ai.nooa</groupId>
   <artifactId>nooa-core</artifactId>
-    <version>0.5.0-SNAPSHOT</version>
+    <version>0.5.0</version>
 </dependency>
 ```
 
@@ -67,7 +72,7 @@ core artifact from this build:
 <dependency>
   <groupId>ai.nooa</groupId>
   <artifactId>nooa-core</artifactId>
-    <version>0.5.0-SNAPSHOT</version>
+    <version>0.5.0</version>
 </dependency>
 ```
 
@@ -299,7 +304,7 @@ small capabilities and orchestrate them in Java.
 | classification, summarization, extraction, planning | `@Generate` methods |
 | branching and sequencing | Java orchestrator methods |
 | persistent memory and shared state | agent fields, context blocks, `MemoryStore` |
-| model/tool instructions | `@SystemPrompt`, method naming, Javadoc, strategy selection |
+| model/tool instructions | `@SystemPrompt`, `@Generate(prompt = "...")`, method naming, strategy selection |
 
 This keeps the LLM focused on the tasks it is good at while leaving the rest to
 Java.
@@ -543,8 +548,8 @@ Every agent extends `Agent`. Every method has a role:
 
 | Method type | How to write it | What happens |
 |---|---|---|
-| **Generation** | `@Generate` + Javadoc | Body replaced at runtime by LLM-generated code |
-| **Deterministic helper** | Normal method body | Runs as regular Java, visible to the LLM |
+| **Generation** | `@Generate(prompt = "...")` | Body replaced at runtime by the configured strategy |
+| **Deterministic helper** | Public method with a normal body | Runs as regular Java and is exposed in `AgentDoc` |
 | **Orchestrator** | Normal method body, calls other methods | Pure Java workflow — classify → route → act |
 
 ```java
@@ -607,16 +612,22 @@ public SentimentResult classify(String text) { ... }
 record SentimentResult(String sentiment, double confidence) {}
 ```
 
-### 3. Visibility: Everything Visible By Default
+### 3. Visibility: Control the Agent API Documentation
 
-Hide explicitly to keep secrets and internals out of the LLM's view:
+`AgentDoc` describes the API that the runtime exposes to generated code. Public
+methods and declared instance fields are included by default; framework methods,
+static fields, private-like methods, and explicitly hidden members are excluded.
+Use `@Hidden` to exclude a public method or instance field:
 
 ```java
-@Hidden private String apiKey = "sk-...";   // field
-@Hidden void rebuildIndex() { ... }          // method
+@Hidden private String cachedIndex = "...";  // field
+@Hidden public void rebuildIndex() { ... }    // method
 ```
 
-The LLM discovers available methods and fields through auto-generated documentation (`AgentDoc`). Public methods and fields are visible. `@Hidden` excludes them.
+`@Hidden` affects generated API documentation and context state rendering. It does
+not change Java access control, erase a value from memory, or provide a security
+boundary for code execution. Use permissions and an external sandbox for those
+concerns.
 
 ### 4. Context Blocks and Events
 
@@ -682,8 +693,8 @@ var relevant = memory.recall(List.of("auth", "bugfix"), 5);
 var preferences = memory.query("preference", null, 10);
 
 // Link records:
-memory.relate(record1.id(), "contradicts", record2.id());
-memory.relate(record1.id(), "supports", record3.id());
+memory.relate(record1.id().toString(), "contradicts", record2.id().toString());
+memory.relate(record1.id().toString(), "supports", record3.id().toString());
 
 // Background reflection runs automatically
 // → merges duplicates, distills episodes into insights, prunes stale
@@ -727,11 +738,11 @@ var llm = UnifiedLLM.create(
 
 ### 8. Tracing
 
-Set `NOOA_TRACE_DIR` to enable JSONL tracing automatically. Or programmatic:
+Enable JSONL tracing programmatically:
 
 ```java
 Tracing.enable(Tracing.jsonl(Path.of("./traces")));
-// All agent calls, LLM calls, and code execution get OTel spans
+// Agent events are written as JSONL records
 ```
 
 ### 9. MCP Integration
@@ -837,7 +848,7 @@ assertThat(result).isEqualTo("Hello, World!");
 ```
 
 ```bash
-mvn test   # 135 tests, all passing
+mvn test
 ```
 
 ## Why Java?
