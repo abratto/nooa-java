@@ -53,7 +53,7 @@ System.out.println(greeting);
 <dependency>
   <groupId>ai.nooa</groupId>
   <artifactId>nooa-core</artifactId>
-    <version>0.4.0</version>
+    <version>0.5.0-SNAPSHOT</version>
 </dependency>
 ```
 
@@ -67,7 +67,7 @@ core artifact from this build:
 <dependency>
   <groupId>ai.nooa</groupId>
   <artifactId>nooa-core</artifactId>
-    <version>0.4.0</version>
+    <version>0.5.0-SNAPSHOT</version>
 </dependency>
 ```
 
