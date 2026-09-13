@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.6.0 (2026-09-13)
 
 ### Added
 - `examples/run.sh` runner with `--list`, single-example, and `--all` modes, per-example timeouts, and a pass/fail summary; `exec-maven-plugin` is now declared in the examples POM
@@ -25,6 +25,7 @@
 - `returnResult` without a value is a correctable error for non-void methods instead of returning `null`
 - `PredictStrategy` rejects records with null components, triggering the retry loop with a diagnostic instead of returning half-populated results
 - JShell `EvalException` messages are unwrapped so sandbox errors reach the model; blocked-API errors name the denied API
+- `run.sh`: the timeout watchdog no longer inherits the caller's stdout, so piping runner output (for example into `tail`) no longer hangs after the script exits
 - Examples: model-facing helpers are `public` (only public methods are model-callable), `ShellToolsDemo` grants explicit `Permissions`, `McpDemo` writes the file it reads, `LegalIntakeDemo` exercises both extraction paths
 
 ### Validation

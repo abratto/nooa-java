@@ -105,6 +105,9 @@ ollama_model_present() {
 }
 
 # Portable timeout: run a command in the background and kill it after N seconds.
+# The watchdog's stdio is detached from the caller: if it inherited stdout (for
+# example a pipe into `tail`), its orphaned `sleep` would keep the pipe open
+# after this script exits and the reader would hang waiting for EOF.
 run_with_timeout() {
   local secs="$1"
   shift
@@ -117,7 +120,7 @@ run_with_timeout() {
       sleep 3
       kill -KILL "$pid" 2>/dev/null
     fi
-  ) &
+  ) </dev/null >/dev/null 2>&1 &
   local watchdog=$!
   wait "$pid"
   local rc=$?

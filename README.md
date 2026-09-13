@@ -67,26 +67,22 @@ For the full example catalog, model configuration (local Ollama by default,
 <dependency>
   <groupId>ai.nooa</groupId>
   <artifactId>nooa-core</artifactId>
-    <version>0.6.0-SNAPSHOT</version>
+    <version>0.6.0</version>
 </dependency>
 ```
-
-The latest released coordinates are `0.5.0`; `0.6.0-SNAPSHOT` tracks the
-current development line on `main` (see
-[docs/sdk-versioning.md](docs/sdk-versioning.md)).
 
 ### Using the SDK in another Java project
 
 The SDK is intended to be consumed like any other Maven library artifact. The
 source of truth is this repository, and the published library coordinates are the
 core artifact from this build. For production use, pin to a released version
-(`0.5.0`); use the `-SNAPSHOT` version only for local development:
+(`0.6.0`); use the `-SNAPSHOT` version only for local development:
 
 ```xml
 <dependency>
   <groupId>ai.nooa</groupId>
   <artifactId>nooa-core</artifactId>
-    <version>0.6.0-SNAPSHOT</version>
+    <version>0.7.0-SNAPSHOT</version>
 </dependency>
 ```
 
