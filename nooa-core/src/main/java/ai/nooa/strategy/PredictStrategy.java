@@ -111,7 +111,33 @@ public final class PredictStrategy implements GenerationStrategy {
             return content.strip();
         }
         var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-        return mapper.readValue(extractJson(content), mapper.constructType(returnType));
+        Object value = mapper.readValue(extractJson(content), mapper.constructType(returnType));
+        validateRecordComponents(value, returnType);
+        return value;
+    }
+
+    /**
+     * Rejects parsed records with null components. A null field almost always
+     * means the model omitted or misnamed a key; failing here triggers the
+     * retry loop with a corrective diagnostic instead of handing the caller a
+     * half-populated result.
+     */
+    private void validateRecordComponents(Object value, Type returnType) {
+        if (!(value instanceof Record record)) {
+            return;
+        }
+        for (var component : record.getClass().getRecordComponents()) {
+            try {
+                component.getAccessor().setAccessible(true);
+                if (component.getAccessor().invoke(record) == null) {
+                    throw new GenerationError("Field '" + component.getName()
+                        + "' is missing or null in the response for "
+                        + displayType(returnType));
+                }
+            } catch (ReflectiveOperationException e) {
+                // Cannot inspect; accept the value rather than fail closed.
+            }
+        }
     }
 
     private String extractJson(String content) {

@@ -8,9 +8,45 @@ import ai.nooa.llm.StructuredOutputHelper;
 import ai.nooa.llm.UnifiedLLM;
 import ai.nooa.strategy.PredictStrategy;
 
+/**
+ * Constrained classification with a legal-safety prompt boundary.
+ *
+ * <p>This example is an intake triage classifier, not legal advice. Its prompt
+ * and result schema classify and route a message; an application must still
+ * apply its own legal review and escalation policy.</p>
+ *
+ * <p><b>NOOA features demonstrated</b></p>
+ * <ul>
+ *   <li>Safety boundary in {@code @SystemPrompt} — the persona explicitly
+ *       forbids legal advice or definitive conclusions; the schema fields
+ *       ({@code category}, {@code urgency}, {@code nextStep}, {@code summary})
+ *       keep the output actionable and bounded.</li>
+ *   <li>{@code @Generate} + {@link PredictStrategy} —
+ *       {@link #handle(String)} returns a validated {@link LegalIntakeResult}
+ *       record in a single model call.</li>
+ *   <li>{@link StructuredOutputHelper} — {@link #handleStructured(String)}
+ *       shows the standalone, provider-agnostic extraction path: build the
+ *       messages yourself, target the record class, and get retry-with-
+ *       validation without the agent runtime. Useful when code owns the
+ *       prompt entirely.</li>
+ *   <li>Deterministic routing helpers — {@link #classify(String)} and
+ *       {@link #route(String)} are plain Java keyword routers an application
+ *       could use to cross-check the model's classification.</li>
+ *   <li>Reasoning effort — keyword-level triage: {@code "low"}, low
+ *       temperature-style determinism is desirable.</li>
+ * </ul>
+ *
+ * <p><b>Run</b> via {@link LegalIntakeDemo}:
+ * <pre>{@code
+ * mvn -pl examples exec:java -Dexec.mainClass=ai.nooa.examples.LegalIntakeDemo
+ * }</pre>
+ */
 @SystemPrompt("You are a legal intake triage assistant. Classify the matter as housing, business, family, or general. Do not provide legal advice or definitive legal conclusions. Return JSON with exactly these fields: category, urgency, nextStep, summary. urgency should be low, medium, or urgent. nextStep should be a short action such as 'connect to housing specialist'. summary should be a one-sentence explanation. Keep the tone empathetic, concise, and safe.")
 public class LegalIntakeAgent extends Agent {
-    public LegalIntakeAgent(UnifiedLLM llm) { super(llm); }
+    public LegalIntakeAgent(UnifiedLLM llm) {
+        super(llm);
+        ExampleLLM.tune(this, "low", 1024);
+    }
 
     String classify(String msg) {
         if (msg.toLowerCase().contains("evict") || msg.toLowerCase().contains("landlord")) {

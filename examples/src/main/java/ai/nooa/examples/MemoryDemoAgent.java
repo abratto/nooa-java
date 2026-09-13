@@ -5,15 +5,45 @@ import ai.nooa.annotations.Generate;
 import ai.nooa.llm.UnifiedLLM;
 import ai.nooa.memory.MemorySkill;
 import ai.nooa.memory.MemoryStore;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * Durable, SQLite-backed memory: write, recall, relate, forget, reflect.
+ *
+ * <p><b>NOOA features demonstrated</b></p>
+ * <ul>
+ *   <li>{@link MemoryStore} — a human-readable SQLite file
+ *       ({@code .nooa-demo-memory.db}) that outlives the agent instance.</li>
+ *   <li>{@link MemorySkill} — the agent-callable capability pack wrapping the
+ *       store; generated code could reach it via
+ *       {@code __agent__.memory().write(...)} just as this demo calls it from
+ *       Java.</li>
+ *   <li>Typed records — {@code preference}, {@code fact}, {@code episode}, and
+ *       {@code insight} entries with importance scores and tags.</li>
+ *   <li>Tag-based recall — {@link MemorySkill#recall(List, int)} ranks by
+ *       importance within a tag intersection.</li>
+ *   <li>Relationships — {@link MemorySkill#relate(String, String, String)}
+ *       links records ({@code supports}, {@code contradicts}, ...).</li>
+ *   <li>Soft delete — {@link MemorySkill#forget(String)} deactivates a record
+ *       without destroying history.</li>
+ *   <li>Reflection — {@link MemorySkill#reflect()} merges duplicates, links
+ *       records, and prunes stale entries; {@code scheduleReflection(300)}
+ *       runs it periodically in the background.</li>
+ *   <li>Resource lifecycle — {@link #close()} releases the store; the demo
+ *       also shows a {@code @Generate} method ({@code analyze}) that could
+ *       consume recalled context.</li>
+ * </ul>
+ *
+ * <p><b>Run</b> (Java-only; no model call is made):
+ * <pre>{@code
+ * mvn -pl examples exec:java -Dexec.mainClass=ai.nooa.examples.MemoryDemo
+ * }</pre>
+ * Creates {@code .nooa-demo-memory.db} in the working directory; delete it
+ * after the run if you do not want the state to persist.</p>
+ */
 public class MemoryDemoAgent extends Agent {
     private static final String PREFERENCE_TAG = "preference";
-    private static final Logger log = LoggerFactory.getLogger(MemoryDemoAgent.class);
     private final MemorySkill memory;
 
     public MemoryDemoAgent(UnifiedLLM llm) {
@@ -21,6 +51,7 @@ public class MemoryDemoAgent extends Agent {
         var store = new MemoryStore(".nooa-demo-memory.db");
         store.scheduleReflection(300);
         this.memory = new MemorySkill(this, store);
+        ExampleLLM.tune(this, "low", 1024);
     }
 
     void seedMemories() {
@@ -37,37 +68,37 @@ public class MemoryDemoAgent extends Agent {
     }
 
     void demonstrate() {
-        log.info("=== 10: Memory ===");
+        System.out.println("=== Memory lifecycle ===");
         seedMemories();
 
         var techMemories = memory.recall(List.of("tech", "java"), 5);
-        log.info("\nTech memories ({}):", techMemories.size());
+        System.out.println("\nTech memories (" + techMemories.size() + "):");
         for (var m : techMemories) {
             var importance = String.format(Locale.ROOT, "%.2f", m.importance());
-            log.info("  [{}] {} (importance: {})", m.type(), m.content(), importance);
+            System.out.println("  [" + m.type() + "] " + m.content() + " (importance: " + importance + ")");
         }
 
         var preferences = memory.query(PREFERENCE_TAG, null, 10);
-        log.info("\nPreferences ({}):", preferences.size());
-        preferences.forEach(p -> log.info("  - {}", p.content()));
+        System.out.println("\nPreferences (" + preferences.size() + "):");
+        preferences.forEach(p -> System.out.println("  - " + p.content()));
 
         if (techMemories.size() >= 2) {
             var r1 = techMemories.getFirst();
             var r2 = techMemories.get(1);
             memory.relate(r1.id().toString(), "supports", r2.id().toString());
-            log.info("\nLinked: {} → supports → {}", r1.type(), r2.type());
+            System.out.println("\nLinked: " + r1.type() + " → supports → " + r2.type());
         }
 
         if (!preferences.isEmpty()) {
             var toForget = preferences.getFirst();
             memory.forget(toForget.id().toString());
             var stillActive = memory.recall(List.of(PREFERENCE_TAG), 5);
-            log.info("\nAfter forget: {} active preferences (was {})", stillActive.size(), preferences.size());
+            System.out.println("\nAfter forget: " + stillActive.size() + " active preferences (was " + preferences.size() + ")");
         }
 
         memory.reflect();
         var allActive = memory.query(null, null, 20);
-        log.info("\nActive records after reflection: {}", allActive.size());
+        System.out.println("\nActive records after reflection: " + allActive.size());
     }
 
     public MemorySkill memory() { return memory; }

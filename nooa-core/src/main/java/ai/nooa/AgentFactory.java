@@ -100,7 +100,12 @@ public final class AgentFactory {
 
         try {
             return builder.make()
-                .load(agentClass.getClassLoader(), ClassLoadingStrategy.Default.WRAPPER)
+                // INJECTION defines the subclass in the agent's own classloader.
+                // WRAPPER's child classloader breaks cross-loader type access
+                // under embedding realms such as Maven exec:java or app servers
+                // (types loaded by the realm and the ByteBuddy child loader are
+                // distinct and cannot access each other).
+                .load(agentClass.getClassLoader(), ClassLoadingStrategy.Default.INJECTION)
                 .getLoaded();
         } catch (Exception e) {
             throw new NooaException(

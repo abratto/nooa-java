@@ -12,25 +12,43 @@ import ai.nooa.llm.UnifiedLLM;
  * Smallest useful orchestration example: Java supplies facts, and one NOOA
  * capability turns those facts into a concise reader-facing summary.
  *
- * <p>Run it from the repository root with:
+ * <p><b>NOOA features demonstrated</b></p>
+ * <ul>
+ *   <li>Java-owned orchestration — {@link #digestCurrentNews()} is a plain
+ *       method that decides what happens and in which order; the model never
+ *       owns control flow.</li>
+ *   <li>Deterministic input preparation — {@link #fetchArticle()} stands in
+ *       for a real news client. Keeping retrieval out of the model makes the
+ *       workflow predictable and testable.</li>
+ *   <li>{@code @Generate} + {@link PredictStrategy} on a {@code String} return
+ *       — even a text capability benefits from the strategy's JSON contract
+ *       and retry-with-diagnostic loop; the parsed JSON string is returned
+ *       stripped.</li>
+ *   <li>Grounded prompts — the article text is a method argument, so the
+ *       runtime embeds the actual content in the task prompt
+ *       ({@code CurrentCall.userPrompt}) instead of relying on a vague
+ *       docstring.</li>
+ *   <li>Reasoning effort — a fixed 2-sentence summarization: {@code "low"}.</li>
+ * </ul>
+ *
+ * <p><b>Run</b> (this class has its own {@code main}):
  * <pre>{@code
- * mvn -pl examples -am compile && \
- * mvn -pl examples exec:java \
- *     -Dexec.mainClass=ai.nooa.examples.NewsDigestAgent
+ * mvn -pl examples exec:java -Dexec.mainClass=ai.nooa.examples.NewsDigestAgent
  * }</pre>
  * The shared {@link ExampleLLM} configuration uses the local Ollama model by
  * default; set {@code NOOA_MODEL} or the provider environment variables when
- * using a different model or endpoint.
+ * using a different model or endpoint.</p>
  *
  * <p>The boundary is intentional: fetching or constructing source facts is
  * deterministic Java, while wording and prioritizing the summary is the part
  * delegated to the model. Keeping those responsibilities separate makes the
- * workflow predictable and easy to replace with a real news client later.
+ * workflow predictable and easy to replace with a real news client later.</p>
  */
 @SystemPrompt("You are a news summarization agent. Summarize the provided article in exactly 2 sentences. Name the key event, why it matters, and any direct business or technical impact. Do not add speculation or filler.")
 public class NewsDigestAgent extends Agent {
     public NewsDigestAgent(UnifiedLLM llm) {
         super(llm);
+        ExampleLLM.tune(this, "low", 1024);
     }
 
     /**

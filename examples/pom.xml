@@ -16,6 +16,12 @@
     <name>NOOA Java — Examples</name>
     <description>Example agents using the NOOA SDK</description>
 
+    <properties>
+        <!-- Default entry point; override with -Dexec.mainClass=... -->
+        <exec.mainClass>ai.nooa.examples.QuickstartExamples</exec.mainClass>
+        <exec-maven-plugin.version>3.5.0</exec-maven-plugin.version>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>ai.nooa</groupId>
@@ -35,7 +41,21 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
-            <scope>test</scope>
+            <scope>runtime</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>${exec-maven-plugin.version}</version>
+                <configuration>
+                    <mainClass>${exec.mainClass}</mainClass>
+                    <classpathScope>runtime</classpathScope>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

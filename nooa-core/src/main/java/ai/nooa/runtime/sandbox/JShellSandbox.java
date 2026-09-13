@@ -3,7 +3,15 @@ package ai.nooa.runtime.sandbox;
 import ai.nooa.Agent;
 import ai.nooa.strategy.ExecutionResult;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.PrintStream;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -11,6 +19,7 @@ import java.util.Set;
 import java.util.concurrent.*;
 import jdk.jshell.JShell;
 import jdk.jshell.Snippet;
+import jdk.jshell.SourceCodeAnalysis;
 import jdk.jshell.SnippetEvent;
 import jdk.jshell.execution.LocalExecutionControl;
 import jdk.jshell.spi.ExecutionControl;
@@ -56,7 +65,42 @@ public final class JShellSandbox implements SandboxExecutor {
                 new AppClassLoaderExecutionControlProvider(agent.getClass().getClassLoader()),
                 Map.of())
             .build();
+        registerAgentClasspath(agent);
         loadPreamble(agent);
+    }
+
+    /**
+     * Make the agent's classpath visible to the JShell compiler.
+     * <p>{@link LocalExecutionControl} only routes <em>execution</em> to the
+     * agent's classloader; JShell still compiles snippets against the JVM's
+     * {@code java.class.path}. Under embedding classloaders such as Maven's
+     * {@code exec:java} realm or application servers, framework classes are not
+     * on the system classpath, so snippets that reference them (e.g.
+     * {@code SandboxContext}) fail to compile with
+     * {@code package ... does not exist}. Registering the classloader's URLs
+     * closes that gap.</p>
+     */
+    private void registerAgentClasspath(Agent agent) {
+        var entries = new LinkedHashSet<String>();
+        var systemClasspath = System.getProperty("java.class.path");
+        if (systemClasspath != null && !systemClasspath.isBlank()) {
+            Collections.addAll(entries, systemClasspath.split(File.pathSeparator));
+        }
+        for (ClassLoader loader = agent.getClass().getClassLoader();
+             loader != null; loader = loader.getParent()) {
+            if (loader instanceof URLClassLoader urlLoader) {
+                for (URL url : urlLoader.getURLs()) {
+                    try {
+                        entries.add(new File(url.toURI()).getPath());
+                    } catch (IllegalArgumentException | URISyntaxException ignored) {
+                        entries.add(url.toString());
+                    }
+                }
+            }
+        }
+        if (!entries.isEmpty()) {
+            jshell.addToClasspath(String.join(File.pathSeparator, entries));
+        }
     }
 
     /**
@@ -100,14 +144,14 @@ public final class JShellSandbox implements SandboxExecutor {
         if (agentTypeName == null) {
             agentTypeName = agentType.getName();
         }
-        jshell.eval(
+        eval("__agent__",
             "var __agent__ = (" + agentTypeName + ")"
             + " ai.nooa.runtime.sandbox.SandboxContext.getAgent();");
-        jshell.eval(
+        eval("__context__/__events__",
             "var __context__ = __agent__.context();\n"
             + "var __events__ = __agent__.events();");
 
-        jshell.eval("""
+        eval("returnResult", """
             Object returnResult(Object value) {
                 ai.nooa.runtime.sandbox.SandboxContext.setReturnValue(value);
                 return value;
@@ -116,14 +160,40 @@ public final class JShellSandbox implements SandboxExecutor {
     }
 
     /**
+     * Evaluate a snippet and log any rejection. Silent JShell failures make
+     * generated code look broken when the real cause is a missing binding.
+     */
+    private void eval(String label, String snippet) {
+        for (SnippetEvent event : jshell.eval(snippet)) {
+            if (event.status() == Snippet.Status.REJECTED) {
+                String diagnostics = jshell.diagnostics(event.snippet())
+                    .map(d -> d.getMessage(Locale.getDefault()))
+                    .reduce((a, b) -> a + "\n" + b)
+                    .orElse("Unknown error");
+                log.warn("Sandbox preamble snippet '{}' rejected: {}", label, diagnostics);
+            }
+        }
+    }
+
+    /**
      * Bind a method argument as a typed REPL variable so generated code can
      * reference it by name (e.g. {@code stageId}, {@code inputs}).
      */
     public void bindVariable(String name, String typeName, Object value) {
         SandboxContext.setVariable(name, value);
-        jshell.eval(
+        List<SnippetEvent> events = jshell.eval(
             "var " + name + " = (" + typeName + ")"
             + " ai.nooa.runtime.sandbox.SandboxContext.getVariable(\"" + name + "\");");
+        for (SnippetEvent event : events) {
+            if (event.status() != Snippet.Status.VALID) {
+                String diagnostics = jshell.diagnostics(event.snippet())
+                    .map(d -> d.getMessage(Locale.getDefault()))
+                    .reduce((a, b) -> a + "\n" + b)
+                    .orElse("Unknown error");
+                log.warn("Sandbox variable binding '{}' as '{}' rejected: {}",
+                    name, typeName, diagnostics);
+            }
+        }
     }
 
     /**
@@ -136,7 +206,7 @@ public final class JShellSandbox implements SandboxExecutor {
         stderrCapture.reset();
 
         if (containsBlockedImports(code)) {
-            return new ExecutionResult("", "", "Blocked import or API used", null, false, false);
+            return new ExecutionResult("", "", blockedApiIn(code), null, false, false);
         }
 
         try {
@@ -155,10 +225,8 @@ public final class JShellSandbox implements SandboxExecutor {
     private ExecutionResult executeWithTimeout(String code) throws TimeoutException {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
-            Future<ExecutionResult> future = executor.submit(() -> {
-                List<SnippetEvent> events = jshell.eval(code);
-                return buildResult(events);
-            });
+            Future<ExecutionResult> future = executor.submit(() ->
+                buildResult(evalSnippets(code)));
 
             try {
                 return future.get(timeoutMs, TimeUnit.MILLISECONDS);
@@ -175,6 +243,51 @@ public final class JShellSandbox implements SandboxExecutor {
         } finally {
             executor.shutdownNow();
         }
+    }
+
+    /**
+     * Evaluate a cell the way the {@code jshell} REPL does: split the source
+     * into individual complete snippets with {@link SourceCodeAnalysis} and
+     * evaluate them one at a time.
+     *
+     * <p>Evaluating a multi-statement cell in a single {@code eval} call is
+     * unreliable: when the first statement is a variable declaration, JShell
+     * parses the input as a VAR snippet and silently drops everything after
+     * it (e.g. {@code int x = 5; returnResult(x + 1);} executes the
+     * declaration and ignores the return). Splitting mirrors the REPL and
+     * makes multi-statement cells, including an inline {@code returnResult},
+     * behave as written.</p>
+     */
+    private List<SnippetEvent> evalSnippets(String code) {
+        List<SnippetEvent> events = new ArrayList<>();
+        SourceCodeAnalysis analysis = jshell.sourceCodeAnalysis();
+        String remaining = code.strip();
+        while (!remaining.isEmpty()) {
+            SourceCodeAnalysis.CompletionInfo info = analysis.analyzeCompletion(remaining);
+            switch (info.completeness()) {
+                case EMPTY -> {
+                    return events;
+                }
+                case DEFINITELY_INCOMPLETE, CONSIDERED_INCOMPLETE -> {
+                    // The leading statement is not complete on its own (for
+                    // example a multi-line loop header); evaluate the rest of
+                    // the cell as one snippet so JShell reports real errors.
+                    events.addAll(jshell.eval(remaining));
+                    return events;
+                }
+                case UNKNOWN -> {
+                    // Cannot be analyzed; evaluate as-is like the REPL does
+                    // for unparseable input.
+                    events.addAll(jshell.eval(remaining));
+                    return events;
+                }
+                default -> {
+                    events.addAll(jshell.eval(info.source().strip()));
+                    remaining = info.remaining().strip();
+                }
+            }
+        }
+        return events;
     }
 
     private ExecutionResult buildResult(List<SnippetEvent> events) {
@@ -212,11 +325,49 @@ public final class JShellSandbox implements SandboxExecutor {
 
     private String formatException(Exception ex) {
         if (ex == null) { return "Unknown exception"; }
+        // JShell wraps user-thrown exceptions in EvalException whose own
+        // message is null; the useful message lives on the wrapped cause.
+        if (ex instanceof jdk.jshell.EvalException evalException) {
+            Throwable cause = evalException.getCause();
+            String message = evalException.getMessage();
+            if (message == null && cause != null) {
+                message = cause.getMessage();
+            }
+            String className = evalException.getExceptionClassName();
+            if (message != null || className != null) {
+                String msg = (className != null ? className : evalException.getClass().getSimpleName())
+                    + ": " + message;
+                if (cause != null && cause.getCause() != null) {
+                    msg += "\nCaused by: " + cause.getCause();
+                }
+                return msg;
+            }
+        }
         String msg = ex.getClass().getSimpleName() + ": " + ex.getMessage();
         if (ex.getCause() != null) {
             msg += "\nCaused by: " + ex.getCause().toString();
         }
         return msg;
+    }
+
+    /**
+     * Identify the first blocked API referenced by the code and describe it
+     * for the model. Naming the specific API lets the CodeAct loop self-correct
+     * (for example by calling an {@code __agent__} helper instead of
+     * {@code java.lang.System}).
+     */
+    private String blockedApiIn(String code) {
+        for (String blocked : BLOCKED_PACKAGES) {
+            if (code.contains(blocked)) {
+                var perms = SandboxContext.getAgent().permissions();
+                if (!isAllowedByPermissions(code, blocked, perms)) {
+                    return "Blocked API used: " + blocked
+                        + " — this API is denied by the agent's permissions."
+                        + " Use an __agent__ helper method or returnResult instead.";
+                }
+            }
+        }
+        return "Blocked import or API used";
     }
 
     private boolean containsBlockedImports(String code) {

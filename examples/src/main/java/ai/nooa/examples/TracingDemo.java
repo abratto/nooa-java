@@ -5,7 +5,25 @@ import ai.nooa.tracing.Tracing;
 
 import java.nio.file.Path;
 
-/** Enables JSONL tracing and makes one traced generated call. */
+/**
+ * Enables JSONL tracing and makes one traced generated call.
+ *
+ * <p><b>NOOA features demonstrated</b></p>
+ * <ul>
+ *   <li>{@link Tracing#enable} with the JSONL exporter — agent, LLM, and code
+ *       execution spans are appended to {@code traces_demo/traces.jsonl}.</li>
+ *   <li>{@link Tracing#shutdown} in a finally block — the writer must be
+ *       flushed before the process exits.</li>
+ * </ul>
+ *
+ * <p><b>Run</b>:
+ * <pre>{@code
+ * mvn -pl examples exec:java -Dexec.mainClass=ai.nooa.examples.TracingDemo
+ * }</pre>
+ * or {@code examples/run.sh TracingDemo}. Requires a model endpoint (local
+ * Ollama by default). Inspect the JSONL afterwards; it contains prompt
+ * metadata and event history, so avoid tracing prompts with credentials.</p>
+ */
 public final class TracingDemo {
     private TracingDemo() {}
 

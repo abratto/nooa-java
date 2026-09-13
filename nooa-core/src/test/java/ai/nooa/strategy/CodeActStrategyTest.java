@@ -57,6 +57,51 @@ class CodeActStrategyTest {
     }
 
     @Test
+    @DisplayName("forwards agent sampling overrides to the LLM request")
+    void forwardsAgentSamplingOverrides() throws Exception {
+        agent.samplingOverride("reasoning_effort", "low");
+        llm.respondWith(List.of(
+            new LLMResponse.ToolCall("c1", "returnResult", Map.of("value", "done"))));
+        var call = CurrentCall.fromMethod(
+            TestAgent.class.getDeclaredMethod("generate", String.class),
+            new Object[]{"test"});
+
+        strategy.execute(agent.runtime(), call);
+
+        assertThat(llm.calls().get(0).samplingParams())
+            .containsEntry("reasoning_effort", "low");
+    }
+
+    @Test
+    @DisplayName("generated code re-entering its own @Generate method fails fast")
+    void blocksSelfReentrantGeneration() throws Exception {
+        var reLlm = new FakeLLMClient();
+        // Must be instrumented via AgentFactory so the nested call from
+        // generated code routes back through the runtime and hits the guard.
+        var reAgent = ai.nooa.AgentFactory.create(ai.nooa.TestReentrantAgent.class, reLlm);
+        reLlm.respondWith(List.of(
+            new LLMResponse.ToolCall("c1", "executeJava",
+                Map.of("code", "__agent__.generate(\"x\");"))));
+        reLlm.respondWith(List.of(
+            new LLMResponse.ToolCall("c2", "returnResult", Map.of("value", "recovered"))));
+        var call = CurrentCall.fromMethod(
+            ai.nooa.TestReentrantAgent.class.getDeclaredMethod("generate", String.class),
+            new Object[]{"test"});
+
+        try {
+            var result = reAgent.runtime().callPlan(
+                new CodeActStrategy(CodeActConfig.defaults()), call);
+            assertThat(result).isEqualTo("recovered");
+        } finally {
+            reAgent.close();
+        }
+        assertThat(reAgent.eventManager().all()).anyMatch(e ->
+            e instanceof Event.ExecutionOutput out
+                && out.error() != null
+                && out.error().contains("re-enter"));
+    }
+
+    @Test
     @DisplayName("tool descriptions document the agent binding and return contract")
     void toolDescriptionsDocumentProtocol() {
         assertThat(CodeActStrategy.EXECUTE_JAVA_TOOL.description())

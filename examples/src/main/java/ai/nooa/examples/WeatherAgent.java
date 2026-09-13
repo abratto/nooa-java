@@ -24,26 +24,44 @@ import java.util.List;
 /**
  * WeatherAgent — San Rafael, CA 7-day forecast agent.
  *
- * <p>Run it from the repository root with:
+ * <p>This is the reference example for a production-shaped agent: every
+ * framework feature is used where it earns its place, and nothing else.</p>
+ *
+ * <p><b>NOOA features demonstrated</b></p>
+ * <ul>
+ *   <li>Deterministic data collection in plain Java — {@link #fetchForecast()}
+ *       performs the HTTP calls and JSON parsing. Network I/O has a documented
+ *       contract and gains nothing from a model call.</li>
+ *   <li>{@code @Hidden} dependencies — {@link #http} and {@link #json} are
+ *       excluded from the model-visible capability surface; the model should
+ *       reason about forecast records, not operate the HTTP client.</li>
+ *   <li>Typed I/O boundary — {@link DailyForecast} is the record-shaped
+ *       contract between deterministic code and generation; the runtime
+ *       serializes the typed values into the model call.</li>
+ *   <li>Two-stage typed generation — {@link #noteworthyDays(List)} picks the
+ *       periods that matter ({@link NoteworthyDays}), and
+ *       {@link #weeklyBrief(List, NoteworthyDays)} writes the human-facing
+ *       brief ({@link WeeklyBrief}). Each call has one narrow responsibility
+ *       and a schema the runtime enforces.</li>
+ *   <li>PredictStrategy on both generated methods — structured output with
+ *       retry-on-invalid, so malformed model replies never reach the caller.</li>
+ *   <li>Java orchestrator — {@link #weeklyBriefForSanRafael()} sequences the
+ *       three steps; application control flow stays ordinary Java.</li>
+ *   <li>Strict system prompt — the schema wording in {@code @SystemPrompt}
+ *       reinforces the record types, which matters with local models.</li>
+ *   <li>Reasoning effort — judging 14 forecast periods and writing a brief is
+ *       genuine judgement: {@code "medium"} balances quality and latency.</li>
+ * </ul>
+ *
+ * <p><b>Run</b> (this class has its own {@code main}; needs network access to
+ * {@code api.weather.gov}, which is public and key-free):
  * <pre>{@code
- * mvn -pl examples -am compile && \
- * mvn -pl examples exec:java \
- *     -Dexec.mainClass=ai.nooa.examples.WeatherAgent
+ * mvn -pl examples exec:java -Dexec.mainClass=ai.nooa.examples.WeatherAgent
  * }</pre>
  * The example uses Ollama by default. Set {@code NOOA_MODEL} to select a local
  * model, or set {@code OPENAI_API_KEY} and optionally {@code OPENAI_MODEL} to
  * use OpenAI. {@code NOOA_BASE_URL}, {@code NOOA_API_KEY}, and {@code NOOA_MODEL}
- * can point it at any OpenAI-compatible endpoint. The NWS forecast endpoint is
- * public and does not require an API key.
- *
- * NOOA decomposition in practice:
- *   - deterministic parts (HTTP fetch, JSON parse) are plain Java and @Hidden;
- *     this keeps network and parsing behavior explicit and testable
- *   - the model's two judgement steps are @Generate with typed record outputs;
- *     this gives each call a narrow responsibility and a schema the runtime
- *     can enforce
- *   - the orchestrator sequence is plain Java in {@link #weeklyBriefForSanRafael()},
- *     so application control flow remains ordinary Java and easy to debug
+ * can point it at any OpenAI-compatible endpoint.</p>
  *
  * The {@code prompt} value on each @Generate method is the runtime instruction;
  * ordinary Javadoc remains documentation for readers and generated API docs.
@@ -78,6 +96,8 @@ public class WeatherAgent extends Agent {
         // receive forecast records, not operate the HTTP client directly.
         this.http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
         this.json = new ObjectMapper();
+        // Two judgement steps over 14 typed periods: medium effort.
+        ExampleLLM.tune(this, "medium", 2048);
     }
 
     // ---------- typed I/O surface ----------
@@ -87,7 +107,7 @@ public class WeatherAgent extends Agent {
      *
      * <p>A record is the boundary between deterministic code and generation:
      * Java creates these values from JSON, while NOOA serializes their typed
-     * shape when building a model call.
+     * shape when building a model call.</p>
      */
     public record DailyForecast(
         String shortName,        // e.g. "Monday", "Monday Night"

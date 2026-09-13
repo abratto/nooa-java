@@ -3,6 +3,29 @@ package ai.nooa.examples;
 import ai.nooa.AgentFactory;
 import ai.nooa.llm.UnifiedLLM;
 
+/**
+ * Context and visibility: how the model sees agent state.
+ *
+ * <p><b>NOOA features demonstrated</b></p>
+ * <ol>
+ *   <li>{@link ResearchAgent} (Example 05: Progressive Disclosure) — helper
+ *       methods as model-callable tools; the model pulls facts on demand
+ *       instead of receiving everything up front.</li>
+ *   <li>{@link ProjectAgent} (Example 07: Dynamic Context Blocks) — business
+ *       state in Java, rendered into the prompt as a compact summary that
+ *       re-evaluates before every call.</li>
+ *   <li>{@link DebugAgent} (Example 08: Context Blocks) — a static
+ *       {@code focus} block steering the model, plus inspection of the
+ *       registered block names via {@code contextManager().allBlocks()}.</li>
+ * </ol>
+ *
+ * <p><b>Run</b>:
+ * <pre>{@code
+ * mvn -pl examples exec:java -Dexec.mainClass=ai.nooa.examples.QuickstartAdvanced
+ * }</pre>
+ * or {@code examples/run.sh QuickstartAdvanced}. Requires a model endpoint
+ * (local Ollama by default, see {@link ExampleLLM}).</p>
+ */
 public final class QuickstartAdvanced {
     public static void main(String[] args) {
         var llm = ExampleLLM.create();

@@ -54,6 +54,10 @@ public final class CodeActStrategy implements GenerationStrategy {
         - `returnResult(value)` — submit your final answer (also callable from
           inside `executeJava`)
 
+        Agent methods are NOT tools. `__agent__.methodName(...)` can only be
+        called from inside an `executeJava` code cell — never emit a tool call
+        whose name looks like `__agent__...`; it will be rejected.
+
         When to use which tool:
         - Use `returnResult(...)` directly for simple answers determinable from
           the inputs alone (yes/no, one field, a single lookup).
@@ -77,7 +81,7 @@ public final class CodeActStrategy implements GenerationStrategy {
         ## Execution Context
 
         These names are already in scope inside `executeJava()` (state persists
-        across calls) — call them, don't re-declare.
+        across cells) — call them, don't re-declare.
 
         - `__agent__` — the live agent instance; call its methods via
           `__agent__.methodName(...)`
@@ -87,6 +91,15 @@ public final class CodeActStrategy implements GenerationStrategy {
 
         Standard imports already available: `java.util.*`, `java.util.stream.*`,
         `java.util.concurrent.*`, `com.fasterxml.jackson.databind.ObjectMapper`
+
+        Typing tips:
+        - Use `var` for helper results (e.g. `var r = __agent__.search(q);`).
+          Nested record types returned by agent methods cannot be referenced
+          by their simple name inside a cell — `var` always works.
+        - Do not re-declare variables that already exist in the session; reuse
+          them or pick a fresh name.
+        - Reflection and system APIs are blocked; compute with plain Java and
+          return values via `returnResult`.
         """;
 
     private static String strategySystemPrompt() {
@@ -150,11 +163,34 @@ public final class CodeActStrategy implements GenerationStrategy {
         if (returnType == String.class || returnType == CharSequence.class) {
             return String.valueOf(value);
         }
+        // Models sometimes double-encode structured results: the tool
+        // argument arrives as a String containing JSON. Parse it before
+        // treating the value as a plain Java String.
+        if (value instanceof String s && !s.isBlank()
+            && (s.startsWith("{") || s.startsWith("["))) {
+            try {
+                return JSON.readValue(s, JSON.constructType(returnType));
+            } catch (Exception ignored) {
+                // Fall through to generic conversion.
+            }
+        }
         try {
             return JSON.convertValue(value, returnType);
         } catch (Exception e) {
-            return value;
+            throw new GenerationError("returnResult value '" + value
+                + "' does not match the declared return type " + returnType.getSimpleName()
+                + ". Return a value shaped like the expected type"
+                + (returnType.isRecord()
+                    ? " (JSON object with fields: " + recordFields(returnType) + ")"
+                    : "")
+                + ".", e);
         }
+    }
+
+    private static String recordFields(Class<?> recordType) {
+        return String.join(", ", java.util.Arrays.stream(recordType.getRecordComponents())
+            .map(c -> c.getName())
+            .toList());
     }
 
     private final CodeActConfig config;
@@ -287,7 +323,13 @@ public final class CodeActStrategy implements GenerationStrategy {
                 runtime.eventManager().add(new Event.ToolResultEvent(
                     tc.id(), normalizedTool, value != null ? value.toString() : "null"));
                 if (value == null) {
-                    yield _RETURN_SENTINEL;
+                    if (returnType == null || returnType == void.class || returnType == Void.class) {
+                        yield _RETURN_SENTINEL;
+                    }
+                    runtime.eventManager().add(new Event.ErrorEvent(
+                        "returnResult was called without a value. Call returnResult(value) "
+                            + "with the final " + returnType.getSimpleName() + " result."));
+                    yield null;
                 }
                 yield convertToReturnType(value, returnType);
             }
@@ -296,6 +338,9 @@ public final class CodeActStrategy implements GenerationStrategy {
                 String message = "Unknown tool call '" + tc.name()
                     + "'. Allowed tools: " + allowed
                     + ". Use executeJava for code execution and returnResult for the final output. "
+                    + (tc.name().contains("__agent__") || tc.name().contains(".")
+                        ? "Agent methods are not tools: put `__agent__.method(...)` inside an executeJava code cell. "
+                        : "")
                     + "Re-issue your action as one of those tools.";
                 log.warn(message);
                 runtime.eventManager().add(new Event.ToolResultEvent(tc.id(), tc.name(), message));

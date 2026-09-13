@@ -82,6 +82,41 @@
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>fail-on-ide-compile-stubs</id>
+                        <phase>process-classes</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <fileset id="ideStubClasses" dir="${project.build.outputDirectory}"
+                                         erroronmissingdir="false">
+                                    <include name="**/*.class"/>
+                                    <!-- Eclipse JDT (VS Code Java language server)
+                                         writes this marker into class files it
+                                         could not compile. Because such stubs are
+                                         newer than the sources, incremental javac
+                                         never replaces them and they fail at
+                                         runtime with 'Unresolved compilation
+                                         problem'. Fail here instead of shipping. -->
+                                    <contains text="Unresolved compilation problem"/>
+                                </fileset>
+                                <fail message="IDE-compiled class stubs found in ${project.build.outputDirectory} (the Eclipse JDT language server raced this build and left 'Unresolved compilation problem' classes). Run 'mvn clean install' to rebuild, and consider setting &quot;java.autobuild.enabled&quot;: false in VS Code to stop the language server writing into target/classes.">
+                                    <condition>
+                                        <resourcecount refid="ideStubClasses" when="greater" count="0"/>
+                                    </condition>
+                                </fail>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.1</version>
             </plugin>

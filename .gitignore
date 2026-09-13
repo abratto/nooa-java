@@ -10,3 +10,8 @@ target/
 .classpath
 .DS_Store
 *.log
+
+# Example run artifacts
+snapshot_demo.json
+traces_demo/
+.nooa-demo-memory.db

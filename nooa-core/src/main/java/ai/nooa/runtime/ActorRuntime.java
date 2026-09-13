@@ -21,6 +21,7 @@ import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.context.Scope;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.lang.reflect.Type;
@@ -41,9 +42,20 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
     private SandboxExecutor sandbox;
     private ContextWindowStats stats = ContextWindowStats.empty();
 
-    private final InheritableThreadLocal<Boolean> inGenerationSession =
+    /**
+     * Names of the {@code @Generate} methods currently executing on this
+     * thread chain. Inheritable so sandbox and virtual threads spawned during
+     * a generation session share the stack; the shared deque lets nested
+     * threads observe (and join) the active set.
+     */
+    private final InheritableThreadLocal<java.util.Deque<String>> activeGeneration =
         new InheritableThreadLocal<>() {
-            @Override protected Boolean initialValue() { return false; }
+            @Override protected java.util.Deque<String> initialValue() {
+                return new java.util.ArrayDeque<>();
+            }
+            @Override protected java.util.Deque<String> childValue(java.util.Deque<String> parent) {
+                return parent;
+            }
         };
 
     private static final String PROMPT_LOGGING_PROP = "nooa.log.prompts";
@@ -98,8 +110,9 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
                                          String systemPromptSupplement) {
         List<Message> messages = buildMessages(systemPromptSupplement);
         List<Tool> effectiveTools = tools;
+        Map<String, Object> effectiveSampling = mergeSamplingOverrides(samplingParams);
         CallMiddleware.LlmRequest request = new CallMiddleware.LlmRequest(
-            messages, effectiveTools, samplingParams);
+            messages, effectiveTools, effectiveSampling);
         for (CallMiddleware hook : config.middleware()) {
             request = hook.beforeLlmRequest(agent, request);
         }
@@ -155,6 +168,21 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
         }
     }
 
+    private Map<String, Object> mergeSamplingOverrides(Map<String, Object> samplingParams) {
+        Map<String, Object> overrides = agent.samplingOverrides();
+        if (overrides == null || overrides.isEmpty()) {
+            return samplingParams == null ? Map.of() : samplingParams;
+        }
+        Map<String, Object> merged = new HashMap<>();
+        if (samplingParams != null) {
+            merged.putAll(samplingParams);
+        }
+        // Agent-level overrides are documented as merged on top of strategy
+        // defaults, so they win over params supplied by the strategy.
+        merged.putAll(overrides);
+        return merged;
+    }
+
     @Override
     public ExecutionResult executeCode(String code, Map<String, Object> builtins) {
         if (sandbox == null) { sandbox = config.sandboxExecutorFactory().create(agent); }
@@ -187,11 +215,11 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
 
     @Override
     public Object executeNested(GenerationStrategy strategy, CurrentCall call) {
-        inGenerationSession.set(true);
+        enterGeneration(call);
         try {
             return strategy.execute(this, call);
         } finally {
-            inGenerationSession.set(false);
+            exitGeneration();
         }
     }
 
@@ -200,7 +228,38 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
         return ExpressionEvaluator.evaluate(template, Map.of("self", agent, "type", agent.getClass()));
     }
 
-    public boolean isInGenerationSession() { return Boolean.TRUE.equals(inGenerationSession.get()); }
+    public boolean isInGenerationSession() { return !activeGeneration.get().isEmpty(); }
+
+    /**
+     * Marks a {@code @Generate} method as actively executing.
+     *
+     * @throws ai.nooa.ValidationError if the same method is already executing
+     *     higher in the call stack. Generated code that re-enters its own
+     *     {@code @Generate} method recurses through the strategy loop without
+     *     making progress; failing fast with a typed error lets the model
+     *     correct course instead of silently consuming iterations.
+     */
+    private void enterGeneration(CurrentCall call) {
+        var stack = activeGeneration.get();
+        String name = call.method().getName();
+        if (stack.contains(name)) {
+            throw new ai.nooa.ValidationError(
+                "Generated code attempted to re-enter @Generate method '" + name
+                    + "' while it is already executing. Call a helper method (via"
+                    + " __agent__) instead of the generated method itself.");
+        }
+        stack.push(name);
+    }
+
+    private void exitGeneration() {
+        var stack = activeGeneration.get();
+        if (!stack.isEmpty()) {
+            stack.pop();
+        }
+        if (stack.isEmpty()) {
+            activeGeneration.remove();
+        }
+    }
 
     public ContextWindowStats stats() { return stats; }
 
@@ -212,7 +271,7 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
     public Object callPlan(GenerationStrategy strategy, CurrentCall call) {
         generationLock.lock();
         agent.eventManager().beginScope(call.callId());
-        inGenerationSession.set(true);
+        enterGeneration(call);
         boolean trace = config.enableTracing()
             && !call.method().isAnnotationPresent(NoTrace.class);
         Span span = trace
@@ -241,21 +300,21 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
             agent.eventManager().endScope();
             scope.close();
             span.end();
-            inGenerationSession.remove();
+            exitGeneration();
             generationLock.unlock();
         }
     }
 
     public Object executeTask(GenerationStrategy strategy, CurrentCall call) {
         agent.eventManager().beginScope(call.callId());
-        inGenerationSession.set(true);
+        enterGeneration(call);
         try {
             checkPreconditions(call);
             agent.eventManager().add(new Event.Task(call.userPrompt(true, maxArgChars())));
             return executeWithConditions(strategy, call);
         } finally {
             agent.eventManager().endScope();
-            inGenerationSession.remove();
+            exitGeneration();
         }
     }
 

@@ -68,6 +68,28 @@ class ActorRuntimeTest {
     }
 
     @Test
+    @DisplayName("generate merges agent sampling overrides into the LLM request")
+    void generateMergesAgentSamplingOverrides() {
+        agent.samplingOverride("reasoning_effort", "low");
+        llm.respondWith("ok");
+        agent.runtime().generate(List.of(), null, Map.of());
+        assertThat(llm.calls().get(0).samplingParams())
+            .containsEntry("reasoning_effort", "low");
+    }
+
+    @Test
+    @DisplayName("agent sampling overrides win over strategy-supplied params")
+    void agentSamplingOverridesWinOverStrategyParams() {
+        agent.samplingOverride("reasoning_effort", "high");
+        llm.respondWith("ok");
+        agent.runtime().generate(List.of(), null,
+            Map.of("reasoning_effort", "low", "temperature", 0.2));
+        assertThat(llm.calls().get(0).samplingParams())
+            .containsEntry("reasoning_effort", "high")
+            .containsEntry("temperature", 0.2);
+    }
+
+    @Test
     @DisplayName("generate includes context blocks")
     void generateIncludesContext() {
         agent.context().put("focus", "security");

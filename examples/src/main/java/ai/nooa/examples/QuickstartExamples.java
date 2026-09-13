@@ -5,6 +5,31 @@ import ai.nooa.llm.UnifiedLLM;
 
 import java.util.Map;
 
+/**
+ * The four core patterns in one runnable tour.
+ *
+ * <p><b>NOOA features demonstrated</b></p>
+ * <ol>
+ *   <li>{@link GreetingAgent} — plain {@code @Generate} with the default
+ *       CodeAct strategy answering directly via {@code returnResult}.</li>
+ *   <li>{@link SentimentAgent} — {@link ai.nooa.strategy.PredictStrategy}
+ *       validating a structured result record.</li>
+ *   <li>{@link SupportAgent} — deterministic Java helper facts
+ *       ({@code __agent__.getStock(...)}) feeding a grounded model answer.</li>
+ *   <li>{@link NewsDigestAgent} — a Java-owned workflow: fetch facts, then
+ *       delegate the wording to a typed generated capability.</li>
+ * </ol>
+ *
+ * <p><b>Run</b>:
+ * <pre>{@code
+ * mvn -pl examples -am clean install -DskipTests && \
+ * mvn -pl examples exec:java -Dexec.mainClass=ai.nooa.examples.QuickstartExamples
+ * }</pre>
+ * or {@code examples/run.sh QuickstartExamples}. Requires a model endpoint
+ * (local Ollama by default, see {@link ExampleLLM}). Each agent is closed in a
+ * try/finally, demonstrating the {@link Agent} {@code AutoCloseable} lifecycle
+ * that releases sandbox resources.</p>
+ */
 public final class QuickstartExamples {
 
     public static void main(String[] args) throws Exception {

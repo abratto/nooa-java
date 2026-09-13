@@ -236,10 +236,33 @@ public class UnifiedLLM {
             body.set("tools", JSON.valueToTree(tools));
             body.put("tool_choice", "auto");
         }
-        if (outputModel != null) {
+        if (wantsStructuredOutput(outputModel, tools)) {
             body.set("response_format", buildStructuredOutputSchema(outputModel));
         }
         applySamplingParams(body, samplingParams);
+    }
+
+    /**
+     * Whether the request should constrain output to JSON.
+     *
+     * <p>Structured output only makes sense when the caller wants JSON-shaped
+     * content: a record or POJO target. It must not be forced when the target
+     * is a plain {@code String} or primitive (the model would wrap ordinary
+     * prose in JSON), nor when tools are offered — tool-calling strategies
+     * such as CodeAct communicate their result through the tool protocol, and
+     * a JSON content constraint can suppress or corrupt tool calls.</p>
+     */
+    private static boolean wantsStructuredOutput(Type outputModel, List<Tool> tools) {
+        if (outputModel == null || (tools != null && !tools.isEmpty())) {
+            return false;
+        }
+        Class<?> raw = outputModel instanceof Class<?> clazz ? clazz : Object.class;
+        if (raw == String.class || raw == CharSequence.class || raw == Character.class
+            || raw == char.class || raw == boolean.class || raw == Boolean.class
+            || Number.class.isAssignableFrom(raw) || raw.isPrimitive()) {
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -254,7 +277,7 @@ public class UnifiedLLM {
                                      Type outputModel, Map<String, Object> samplingParams) {
         body.set("messages", messagesToJson(messages));
         body.put("stream", false);
-        if (outputModel != null) {
+        if (wantsStructuredOutput(outputModel, null)) {
             body.put("format", "json");
         }
         ObjectNode options = body.putObject("options");

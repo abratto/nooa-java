@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `examples/run.sh` runner with `--list`, single-example, and `--all` modes, per-example timeouts, and a pass/fail summary; `exec-maven-plugin` is now declared in the examples POM
+- Per-example reasoning-effort tuning via `ExampleLLM.tune(agent, effort, maxTokens)` and the `NOOA_REASONING_EFFORT` / `-Dnooa.reasoningEffort` overrides
+- Local Ollama examples default to the OpenAI-compatible endpoint (`http://localhost:11434/v1`) so tool calling and structured output match hosted providers
+- Build guard that fails with an actionable message when Eclipse JDT (VS Code) leaves `Unresolved compilation problem` class stubs in `target/classes`
+- Regression tests for sampling-override merging, structured-output gating, and CodeAct self-reentrancy (226 core tests total)
+
+### Changed
+- `ActorRuntime` merges `Agent.samplingOverrides()` into every LLM request, so per-agent sampling (e.g. `reasoning_effort`) now applies to all strategies, not only `PredictStrategy`
+- `UnifiedLLM` requests structured output only for JSON-shaped targets without tools; plain `String`/primitive targets and tool-calling requests no longer force `response_format`/`format:"json"`
+- `JShellSandbox` evaluates code cells statement-by-statement via `SourceCodeAnalysis` (REPL semantics) instead of one `eval` per cell
+- `JShellSandbox` registers the agent classloader classpath with JShell so snippets compile under embedding classloaders such as Maven `exec:java` or application servers
+- `AgentFactory` loads instrumented subclasses with `ClassLoadingStrategy.Default.INJECTION` (same classloader), fixing cross-loader type access under `exec:java`
+- `CodeActStrategy` system prompt clarifies that agent methods are not tools and adds `var`-based typing guidance for helper results
+- Examples documentation rewritten per class and in `examples/README.md` (feature mapping, run commands, visibility rules, safety notes)
+
+### Fixed
+- Generated code re-entering its own `@Generate` method now fails fast with a typed `ValidationError` instead of recursing through the strategy loop
+- `returnResult` values that do not match the declared return type raise a correctable `GenerationError` naming the expected type and record fields; JSON-encoded string values are parsed
+- Multi-statement sandbox cells no longer silently drop statements after a leading variable declaration (e.g. `int x = 5; returnResult(x + 1);` now returns `6`)
+- `returnResult` without a value is a correctable error for non-void methods instead of returning `null`
+- `PredictStrategy` rejects records with null components, triggering the retry loop with a diagnostic instead of returning half-populated results
+- JShell `EvalException` messages are unwrapped so sandbox errors reach the model; blocked-API errors name the denied API
+- Examples: model-facing helpers are `public` (only public methods are model-callable), `ShellToolsDemo` grants explicit `Permissions`, `McpDemo` writes the file it reads, `LegalIntakeDemo` exercises both extraction paths
+
+### Validation
+- `mvn test` passes across the reactor (226 nooa-core, 2 examples)
+- `./examples/run.sh --all` passes 14/14 against local Ollama (`qwen3.8:27b-mlx`)
+
 ## v0.5.0 (2026-09-10)
 
 ### Added
