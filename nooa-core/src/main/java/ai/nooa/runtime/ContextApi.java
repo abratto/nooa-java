@@ -20,18 +20,22 @@ public final class ContextApi {
         this.agent = agent;
     }
 
+    /** Store a plain text block, replacing an existing user block with the same key. */
     public void put(String key, String value) {
         agent.contextManager().put(key, value);
     }
 
+    /** Store a structured block whose value is rendered when context is built. */
     public void put(String key, Object value) {
         agent.contextManager().put(key, value);
     }
 
+    /** Store an expression-backed block that is evaluated before each LLM turn. */
     public void putDynamic(String key, String expression) {
         agent.contextManager().putDynamic(key, expression);
     }
 
+    /** Remove a user block; removing a protected framework block throws an exception. */
     public void remove(String key) {
         agent.contextManager().remove(key);
     }

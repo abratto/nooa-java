@@ -64,16 +64,26 @@ public record AgentConfig(
         );
     }
 
+    /**
+     * Return a copy using the supplied strategy for methods without a method-specific override.
+     * The strategy instance is retained; this method does not clone or reset it.
+     */
     public AgentConfig withDefaultStrategy(GenerationStrategy strategy) {
         return new AgentConfig(strategy, maxNestingDepth, enableTracing, methodStrategies, methodConditions,
             middleware, sandboxExecutorFactory);
     }
 
+    /**
+     * Return a copy with the maximum allowed nested generation depth.
+     * A value of zero prevents nested generation; negative values are accepted
+     * and behave as an already-exhausted limit.
+     */
     public AgentConfig withMaxNestingDepth(int depth) {
         return new AgentConfig(defaultStrategy, depth, enableTracing, methodStrategies, methodConditions,
             middleware, sandboxExecutorFactory);
     }
 
+    /** Return a copy with tracing enabled or disabled for agents using this configuration. */
     public AgentConfig withTracing(boolean tracing) {
         return new AgentConfig(defaultStrategy, maxNestingDepth, tracing, methodStrategies, methodConditions,
             middleware, sandboxExecutorFactory);
@@ -91,6 +101,10 @@ public record AgentConfig(
             middleware, sandboxExecutorFactory);
     }
 
+    /**
+     * Return the strategy override for a generated method, or {@code null} when
+     * the default strategy should be used.
+     */
     public GenerationStrategy strategyFor(Method method) {
         return methodStrategies.get(method.getName());
     }
@@ -107,17 +121,28 @@ public record AgentConfig(
             methodStrategies, configured, middleware, sandboxExecutorFactory);
     }
 
+    /**
+     * Return the pre/post conditions configured for a generated method, or
+     * {@code null} when no conditions override exists.
+     */
     public MethodConditions conditionsFor(Method method) {
         return methodConditions.get(method.getName());
     }
 
+    /**
+     * Return a copy with middleware invoked in the supplied order.
+     * The varargs array is defensively copied; passing {@code null} clears all hooks.
+     */
     public AgentConfig withMiddleware(CallMiddleware... hooks) {
         return new AgentConfig(defaultStrategy, maxNestingDepth, enableTracing,
             methodStrategies, methodConditions, hooks == null ? List.of() : List.of(hooks),
             sandboxExecutorFactory);
     }
 
-    /** Configure the execution boundary used by CodeAct. */
+    /**
+     * Return a copy using the supplied sandbox factory. The factory is called
+     * when an agent creates its execution sandbox, and may be used per agent.
+     */
     public AgentConfig withSandboxExecutor(SandboxExecutor.Factory factory) {
         return new AgentConfig(defaultStrategy, maxNestingDepth, enableTracing,
             methodStrategies, methodConditions, middleware, factory);

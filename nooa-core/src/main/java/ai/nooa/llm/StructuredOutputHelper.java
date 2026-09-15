@@ -3,9 +3,7 @@ package ai.nooa.llm;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.RecordComponent;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -47,7 +45,7 @@ public final class StructuredOutputHelper {
                 if (isValidStructuredValue(value)) {
                     return value;
                 }
-            } catch (Exception ignored) {
+            } catch (Exception _) {
                 // Retry with a stricter prompt on the next attempt.
             }
         }
@@ -73,6 +71,7 @@ public final class StructuredOutputHelper {
         return value;
     }
 
+    @SuppressWarnings("java:S3776")
     private boolean isValidStructuredValue(Object value) {
         if (value == null) {
             return false;
@@ -95,7 +94,7 @@ public final class StructuredOutputHelper {
                     if (fieldValue == null || (fieldValue instanceof String s && s.isBlank())) {
                         return false;
                     }
-                } catch (ReflectiveOperationException ignored) {
+                } catch (ReflectiveOperationException _) {
                     return false;
                 }
             }
@@ -106,9 +105,8 @@ public final class StructuredOutputHelper {
     private Object readRecordComponent(Object recordInstance, RecordComponent component) {
         try {
             var accessor = component.getAccessor();
-            accessor.setAccessible(true);
             return accessor.invoke(recordInstance);
-        } catch (ReflectiveOperationException e) {
+        } catch (ReflectiveOperationException _) {
             return null;
         }
     }

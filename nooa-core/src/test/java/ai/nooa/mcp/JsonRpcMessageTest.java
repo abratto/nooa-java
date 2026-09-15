@@ -2,7 +2,6 @@ package ai.nooa.mcp;
 
 import org.junit.jupiter.api.*;
 
-import java.util.*;
 
 import static org.assertj.core.api.Assertions.*;
 

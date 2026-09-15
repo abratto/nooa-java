@@ -1,7 +1,6 @@
 package ai.nooa.runtime;
 
 import ai.nooa.Agent;
-import ai.nooa.NooaException;
 import ai.nooa.annotations.NoTrace;
 import ai.nooa.config.AgentConfig;
 import ai.nooa.context.ContextWindowStats;
@@ -72,6 +71,7 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
         "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*([^\\s,;]+)");
     private static final Pattern BEARER_PATTERN = Pattern.compile("(?i)bearer\\s+([a-z0-9._-]+)");
 
+    /** Create the runtime that owns execution state for one agent instance. */
     public ActorRuntime(Agent agent, AgentConfig config, UnifiedLLM llm) {
         this.agent = agent;
         this.config = config;
@@ -83,22 +83,26 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
     @Override public String agentId() { return agent.agentId(); }
 
     @Override
+    /** Generate using the agent context and a class-based output target. */
     public LLMResponse generate(List<Tool> tools, Class<?> outputModel, Map<String, Object> samplingParams) {
         return generate(tools, outputModel, samplingParams, null);
     }
 
     @Override
+    /** Generate using a reflective output target, including parameterized types where supported. */
     public LLMResponse generate(List<Tool> tools, Type outputModel,
                                 Map<String, Object> samplingParams) {
         return generate(tools, outputModel, samplingParams, null);
     }
 
     @Override
+    /** Generate with a class-based output target and an extra system-prompt supplement. */
     public LLMResponse generate(List<Tool> tools, Class<?> outputModel, Map<String, Object> samplingParams, String systemPromptSupplement) {
         return generateWithType(tools, outputModel, samplingParams, systemPromptSupplement);
     }
 
     @Override
+    /** Generate with a reflective output target and an extra system-prompt supplement. */
     public LLMResponse generate(List<Tool> tools, Type outputModel,
                                 Map<String, Object> samplingParams,
                                 String systemPromptSupplement) {
@@ -146,14 +150,17 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
 
             int blocksChars = estimateChars(agent.contextManager().render(agent));
             int eventsChars = estimateChars(agent.eventManager().renderSummary());
-            stats = stats.accumulate(response.usage() != null ? response.usage()
-                : new ai.nooa.llm.LLMResponse.Usage(0, 0, 0), blocksChars, eventsChars);
+            var usage = response.usage();
+            if (usage == null) {
+                usage = new LLMResponse.Usage(0, 0, 0);
+            }
+            stats = stats.accumulate(usage, blocksChars, eventsChars);
 
             agent.eventManager().add(new Event.LLMComplete(
                 llm.model(),
-                response.usage() != null ? response.usage().promptTokens() : 0,
-                response.usage() != null ? response.usage().completionTokens() : 0,
-                response.usage() != null ? response.usage().totalTokens() : 0));
+                usage.promptTokens(),
+                usage.completionTokens(),
+                usage.totalTokens()));
             agent.eventManager().add(new Event.LLMCallEnd(true, null));
             span.setStatus(StatusCode.OK);
             return response;
@@ -184,6 +191,7 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
     }
 
     @Override
+    /** Execute middleware-wrapped code in the lazily created agent sandbox. */
     public ExecutionResult executeCode(String code, Map<String, Object> builtins) {
         if (sandbox == null) { sandbox = config.sandboxExecutorFactory().create(agent); }
         Span span = Tracing.startCodeExecutionSpan();
@@ -208,12 +216,14 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
     }
 
     @Override
+    /** Bind a typed value into the lazily created sandbox for later generated code. */
     public void bindVariable(String name, String typeName, Object value) {
         if (sandbox == null) { sandbox = config.sandboxExecutorFactory().create(agent); }
         sandbox.bindVariable(name, typeName, value);
     }
 
     @Override
+    /** Execute a nested strategy while tracking generation-session re-entry. */
     public Object executeNested(GenerationStrategy strategy, CurrentCall call) {
         enterGeneration(call);
         try {
@@ -224,10 +234,12 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
     }
 
     @Override
+    /** Expand expressions with {@code self} bound to the current agent and {@code type} to its class. */
     public String expandVariables(String template) {
         return ExpressionEvaluator.evaluate(template, Map.of("self", agent, "type", agent.getClass()));
     }
 
+    /** Return whether the current thread is inside a tracked generation session. */
     public boolean isInGenerationSession() { return !activeGeneration.get().isEmpty(); }
 
     /**
@@ -398,7 +410,8 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
         if (raw != null) {
             try {
                 return Integer.parseInt(raw.trim());
-            } catch (NumberFormatException ignored) {
+            } catch (NumberFormatException _) {
+                // Fall back to the default when the property is not numeric.
             }
         }
         return DEFAULT_MAX_ARG_CHARS;

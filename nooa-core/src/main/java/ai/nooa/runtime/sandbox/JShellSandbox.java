@@ -5,7 +5,6 @@ import ai.nooa.strategy.ExecutionResult;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.PrintStream;
-import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -33,6 +32,8 @@ import org.slf4j.LoggerFactory;
  * with timeout and import restrictions.
  */
 public final class JShellSandbox implements SandboxExecutor {
+
+    private static final String UNKNOWN_ERROR = "Unknown error";
 
     private static final Logger log = LoggerFactory.getLogger(JShellSandbox.class);
 
@@ -92,7 +93,7 @@ public final class JShellSandbox implements SandboxExecutor {
                 for (URL url : urlLoader.getURLs()) {
                     try {
                         entries.add(new File(url.toURI()).getPath());
-                    } catch (IllegalArgumentException | URISyntaxException ignored) {
+                    } catch (IllegalArgumentException | URISyntaxException _) {
                         entries.add(url.toString());
                     }
                 }
@@ -169,7 +170,7 @@ public final class JShellSandbox implements SandboxExecutor {
                 String diagnostics = jshell.diagnostics(event.snippet())
                     .map(d -> d.getMessage(Locale.getDefault()))
                     .reduce((a, b) -> a + "\n" + b)
-                    .orElse("Unknown error");
+                    .orElse(UNKNOWN_ERROR);
                 log.warn("Sandbox preamble snippet '{}' rejected: {}", label, diagnostics);
             }
         }
@@ -189,7 +190,7 @@ public final class JShellSandbox implements SandboxExecutor {
                 String diagnostics = jshell.diagnostics(event.snippet())
                     .map(d -> d.getMessage(Locale.getDefault()))
                     .reduce((a, b) -> a + "\n" + b)
-                    .orElse("Unknown error");
+                    .orElse(UNKNOWN_ERROR);
                 log.warn("Sandbox variable binding '{}' as '{}' rejected: {}",
                     name, typeName, diagnostics);
             }
@@ -223,8 +224,7 @@ public final class JShellSandbox implements SandboxExecutor {
     }
 
     private ExecutionResult executeWithTimeout(String code) throws TimeoutException {
-        ExecutorService executor = Executors.newSingleThreadExecutor();
-        try {
+        try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
             Future<ExecutionResult> future = executor.submit(() ->
                 buildResult(evalSnippets(code)));
 
@@ -240,8 +240,6 @@ public final class JShellSandbox implements SandboxExecutor {
                 future.cancel(true);
                 throw e;
             }
-        } finally {
-            executor.shutdownNow();
         }
     }
 
@@ -304,7 +302,7 @@ public final class JShellSandbox implements SandboxExecutor {
                 error = jshell.diagnostics(event.snippet())
                     .map(d -> d.getMessage(Locale.getDefault()))
                     .reduce((a, b) -> a + "\n" + b)
-                    .orElse("Unknown error");
+                    .orElse(UNKNOWN_ERROR);
             } else if (event.exception() != null) {
                 error = formatException(event.exception());
             } else if (event.status() == Snippet.Status.VALID && event.value() != null) {
@@ -328,26 +326,31 @@ public final class JShellSandbox implements SandboxExecutor {
         // JShell wraps user-thrown exceptions in EvalException whose own
         // message is null; the useful message lives on the wrapped cause.
         if (ex instanceof jdk.jshell.EvalException evalException) {
-            Throwable cause = evalException.getCause();
-            String message = evalException.getMessage();
-            if (message == null && cause != null) {
-                message = cause.getMessage();
-            }
-            String className = evalException.getExceptionClassName();
-            if (message != null || className != null) {
-                String msg = (className != null ? className : evalException.getClass().getSimpleName())
-                    + ": " + message;
-                if (cause != null && cause.getCause() != null) {
-                    msg += "\nCaused by: " + cause.getCause();
-                }
-                return msg;
-            }
+            return formatEvalException(evalException);
         }
-        String msg = ex.getClass().getSimpleName() + ": " + ex.getMessage();
-        if (ex.getCause() != null) {
-            msg += "\nCaused by: " + ex.getCause().toString();
+        return formatGenericException(ex);
+    }
+
+    private static String formatEvalException(jdk.jshell.EvalException exception) {
+        Throwable cause = exception.getCause();
+        String message = exception.getMessage();
+        if (message == null && cause != null) message = cause.getMessage();
+        String className = exception.getExceptionClassName();
+        if (message == null && className == null) return formatGenericException(exception);
+        String result = (className != null ? className : exception.getClass().getSimpleName())
+            + ": " + message;
+        if (cause != null && cause.getCause() != null) {
+            result += "\nCaused by: " + cause.getCause();
         }
-        return msg;
+        return result;
+    }
+
+    private static String formatGenericException(Exception exception) {
+        String result = exception.getClass().getSimpleName() + ": " + exception.getMessage();
+        if (exception.getCause() != null) {
+            result += "\nCaused by: " + exception.getCause();
+        }
+        return result;
     }
 
     /**
@@ -400,7 +403,7 @@ public final class JShellSandbox implements SandboxExecutor {
 
     private boolean isClassLoadAllowed(String code, ai.nooa.security.Permissions perms) {
         java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(
-            "(?:import\\s+|new\\s+|\\()([a-zA-Z_$][\\w$]*(?:\\.[a-zA-Z_$][\\w$]*)+)").matcher(code);
+            "(?:import\\s+|new\\s+|\\()([a-zA-Z_$][\\w$]*(?:\\.[a-zA-Z_$][\\w$]*)++)").matcher(code);
         while (matcher.find()) {
             if (perms.checkClassLoad(matcher.group(1))
                 == ai.nooa.security.Permissions.Level.ALLOW) {
@@ -414,8 +417,9 @@ public final class JShellSandbox implements SandboxExecutor {
         java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(
             "\"(/[^\"]+)\"|'([^']+)'").matcher(code);
         while (matcher.find()) {
-            String path = matcher.group(1) != null ? matcher.group(1) : matcher.group(2);
-            if (path != null && perms.checkFile(path) == ai.nooa.security.Permissions.Level.ALLOW) {
+            String path = matcher.group(1);
+            if (path == null) path = matcher.group(2);
+            if (perms.checkFile(path) == ai.nooa.security.Permissions.Level.ALLOW) {
                 return true;
             }
         }
@@ -426,8 +430,9 @@ public final class JShellSandbox implements SandboxExecutor {
         java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(
             "\"(https?://[^\"]+)\"|'(https?://[^']+)'").matcher(code);
         while (matcher.find()) {
-            String url = matcher.group(1) != null ? matcher.group(1) : matcher.group(2);
-            if (url != null && perms.checkUrl(url) == ai.nooa.security.Permissions.Level.ALLOW) {
+            String url = matcher.group(1);
+            if (url == null) url = matcher.group(2);
+            if (perms.checkUrl(url) == ai.nooa.security.Permissions.Level.ALLOW) {
                 return true;
             }
         }

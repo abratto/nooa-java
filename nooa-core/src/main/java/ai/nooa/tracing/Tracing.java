@@ -20,6 +20,7 @@ import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Tracing configuration for NOOA agents.
@@ -34,14 +35,14 @@ public final class Tracing {
 
     private static final Logger log = LoggerFactory.getLogger(Tracing.class);
     private static final String INSTRUMENTATION_NAME = "nooa-java";
-    private static volatile OpenTelemetry openTelemetry;
-    private static volatile Tracer tracer;
+    private static final AtomicReference<OpenTelemetry> openTelemetry = new AtomicReference<>();
+    private static final AtomicReference<Tracer> tracer = new AtomicReference<>();
 
     private Tracing() {}
 
     /** Enable tracing with one or more exporters. */
-    public static void enable(SpanExporter... exporters) {
-        if (openTelemetry != null) return;
+    public static synchronized void enable(SpanExporter... exporters) {
+        if (openTelemetry.get() != null) return;
 
         var builder = SdkTracerProvider.builder();
         for (var exporter : exporters) {
@@ -49,16 +50,17 @@ public final class Tracing {
         }
         var provider = builder.build();
 
-        openTelemetry = OpenTelemetrySdk.builder()
+        OpenTelemetry telemetry = OpenTelemetrySdk.builder()
             .setTracerProvider(provider)
             .build();
-        tracer = openTelemetry.getTracer(INSTRUMENTATION_NAME);
+        openTelemetry.set(telemetry);
+        tracer.set(telemetry.getTracer(INSTRUMENTATION_NAME));
         log.info("Tracing enabled with {} exporter(s)", exporters.length);
     }
 
     /** Auto-enable from NOOA_TRACE_DIR or OTLP endpoint env vars. */
-    public static void autoEnable() {
-        if (openTelemetry != null) return;
+    public static synchronized void autoEnable() {
+        if (openTelemetry.get() != null) return;
         String traceDir = System.getenv("NOOA_TRACE_DIR");
         String otlpEndpoint = System.getenv("OTEL_EXPORTER_OTLP_ENDPOINT");
 
@@ -76,25 +78,28 @@ public final class Tracing {
         return new JsonlSpanExporter(directory);
     }
 
-    public static Tracer tracer() {
-        if (tracer == null) {
+    /** Return the configured tracer, lazily enabling tracing or a no-op fallback. */
+    public static synchronized Tracer tracer() {
+        if (tracer.get() == null) {
             autoEnable();
-            if (tracer == null) {
-                tracer = OpenTelemetry.noop().getTracer(INSTRUMENTATION_NAME);
+            if (tracer.get() == null) {
+                tracer.set(OpenTelemetry.noop().getTracer(INSTRUMENTATION_NAME));
             }
         }
-        return tracer;
+        return tracer.get();
     }
 
-    public static boolean isEnabled() { return openTelemetry != null; }
+    /** Return whether the SDK has been initialized with an active tracing provider. */
+    public static boolean isEnabled() { return openTelemetry.get() != null; }
 
-    /** Shut down tracing. */
-    public static void shutdown() {
-        if (openTelemetry instanceof OpenTelemetrySdk sdk) {
+    /** Shut down the global tracing provider and reset lazy initialization state. */
+    public static synchronized void shutdown() {
+        OpenTelemetry telemetry = openTelemetry.get();
+        if (telemetry instanceof OpenTelemetrySdk sdk) {
             sdk.getSdkTracerProvider().shutdown();
         }
-        openTelemetry = null;
-        tracer = null;
+        openTelemetry.set(null);
+        tracer.set(null);
     }
 
     // ---- Span helpers for ActorRuntime ----

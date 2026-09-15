@@ -9,12 +9,10 @@ import ai.nooa.runtime.ContextApi;
 import ai.nooa.runtime.ContextManager;
 import ai.nooa.runtime.EventManager;
 import ai.nooa.runtime.EventsApi;
-import ai.nooa.agentdoc.AgentDoc;
 import ai.nooa.llm.UnifiedLLM;
 import ai.nooa.security.PermissionCallback;
 import ai.nooa.security.Permissions;
 
-import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -62,10 +60,12 @@ public abstract class Agent implements AutoCloseable {
     @Hidden private PermissionCallback permissionCallback;
     @Hidden private final Map<String, Object> samplingOverrides = new java.util.concurrent.ConcurrentHashMap<>();
 
+    /** Construct a subclass-backed agent using the default configuration. */
     protected Agent(UnifiedLLM llm) {
         this(llm, AgentConfig.defaults());
     }
 
+    /** Construct an agent with an LLM client and immutable execution configuration. */
     protected Agent(UnifiedLLM llm, AgentConfig config) {
         this.agentId = UUID.randomUUID().toString();
         this.llm = Objects.requireNonNull(llm, "llm must not be null");
@@ -103,14 +103,18 @@ public abstract class Agent implements AutoCloseable {
     @Hidden public ContextApi context() { return contextApi; }
     @Hidden public EventsApi events() { return eventsApi; }
 
+    /** Replace the policy used to authorize generated shell and code operations. */
     public void setPermissions(Permissions permissions) {
         this.permissions = permissions;
     }
+    /** Return the current mutable permission policy. */
     public Permissions permissions() { return permissions; }
 
+    /** Set the callback consulted when a permission policy requires user approval. */
     public void setPermissionCallback(PermissionCallback callback) {
         this.permissionCallback = callback;
     }
+    /** Return the current approval callback, or {@code null} when none is configured. */
     public PermissionCallback permissionCallback() { return permissionCallback; }
 
     /**
@@ -148,6 +152,7 @@ public abstract class Agent implements AutoCloseable {
     }
 
     @Override
+    /** Release the runtime sandbox and other agent-owned execution resources. */
     public void close() {
         runtime.close();
     }

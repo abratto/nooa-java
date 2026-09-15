@@ -4,7 +4,7 @@ import java.sql.*;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.stream.Collectors;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,6 +15,9 @@ import org.slf4j.LoggerFactory;
 public final class MemoryStore implements AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(MemoryStore.class);
+    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final String MEMORY_COLUMNS =
+        "id, created_at, updated_at, owner, type, content, importance, tags, relationships, active";
 
     private final String dbPath;
     private final ScheduledExecutorService reflectionExecutor;
@@ -39,7 +42,8 @@ public final class MemoryStore implements AutoCloseable {
 
     private void initSchema() {
         try (var conn = connect()) {
-            conn.createStatement().execute("""
+            try (var statement = conn.createStatement()) {
+                statement.execute("""
                 CREATE TABLE IF NOT EXISTS memories (
                     id TEXT PRIMARY KEY,
                     created_at TEXT NOT NULL,
@@ -53,12 +57,13 @@ public final class MemoryStore implements AutoCloseable {
                     active INTEGER NOT NULL DEFAULT 1
                 )
             """);
-            conn.createStatement().execute(
-                "CREATE INDEX IF NOT EXISTS idx_memories_owner ON memories(owner)");
-            conn.createStatement().execute(
-                "CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type)");
-            conn.createStatement().execute(
-                "CREATE INDEX IF NOT EXISTS idx_memories_active ON memories(active)");
+                statement.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_memories_owner ON memories(owner)");
+                statement.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type)");
+                statement.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_memories_active ON memories(active)");
+            }
         } catch (SQLException e) {
             throw new RuntimeException("Cannot init memory schema", e);
         }
@@ -66,32 +71,34 @@ public final class MemoryStore implements AutoCloseable {
 
     // ---- CRUD ----
 
-    public void write(MemoryRecord record) {
+    /** Persist a record, replacing an existing record with the same ID. */
+    public void write(MemoryRecord memory) {
         String sql = """
             INSERT OR REPLACE INTO memories
             (id, created_at, updated_at, owner, type, content, importance, tags, relationships, active)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
         try (var conn = connect(); var ps = conn.prepareStatement(sql)) {
-            ps.setString(1, record.id().toString());
-            ps.setString(2, record.createdAt().toString());
-            ps.setString(3, record.updatedAt().toString());
-            ps.setString(4, record.owner());
-            ps.setString(5, record.type());
-            ps.setString(6, record.content());
-            ps.setDouble(7, record.importance());
-            ps.setString(8, toJson(record.tags()));
-            ps.setString(9, toJson(record.relationships()));
-            ps.setInt(10, record.active() ? 1 : 0);
+            ps.setString(1, memory.id().toString());
+            ps.setString(2, memory.createdAt().toString());
+            ps.setString(3, memory.updatedAt().toString());
+            ps.setString(4, memory.owner());
+            ps.setString(5, memory.type());
+            ps.setString(6, memory.content());
+            ps.setDouble(7, memory.importance());
+            ps.setString(8, toJson(memory.tags()));
+            ps.setString(9, toJson(memory.relationships()));
+            ps.setInt(10, memory.active() ? 1 : 0);
             ps.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException("Failed to write memory", e);
         }
     }
 
+    /** Return a record by ID, including inactive records; storage errors yield an empty result. */
     public Optional<MemoryRecord> get(String id) {
         try (var conn = connect(); var ps = conn.prepareStatement(
-                "SELECT * FROM memories WHERE id = ?")) {
+                "SELECT " + MEMORY_COLUMNS + " FROM memories WHERE id = ?")) {
             ps.setString(1, id);
             var rs = ps.executeQuery();
             if (rs.next()) return Optional.of(mapRecord(rs));
@@ -105,7 +112,8 @@ public final class MemoryStore implements AutoCloseable {
      * Query active memories for an owner, sorted by importance desc.
      */
     public List<MemoryRecord> query(String owner, String type, List<String> tags, int limit) {
-        var sql = new StringBuilder("SELECT * FROM memories WHERE active = 1 AND owner = ?");
+        var sql = new StringBuilder("SELECT " + MEMORY_COLUMNS
+            + " FROM memories WHERE active = 1 AND owner = ?");
         var params = new ArrayList<String>();
         params.add(owner);
 
@@ -147,6 +155,7 @@ public final class MemoryStore implements AutoCloseable {
         return query(owner, null, contextTags, limit);
     }
 
+    /** Soft-delete a record by marking it inactive without removing its data. */
     public void forget(String id) {
         try (var conn = connect(); var ps = conn.prepareStatement(
                 "UPDATE memories SET active = 0, updated_at = ? WHERE id = ?")) {
@@ -176,7 +185,7 @@ public final class MemoryStore implements AutoCloseable {
         }
     }
 
-    /** Schedule periodic reflection for all owners. */
+    /** Schedule periodic stale-record reflection for all owners until this store is closed. */
     public void scheduleReflection(long intervalSeconds) {
         reflectionExecutor.scheduleAtFixedRate(() -> {
             try (var conn = connect()) {
@@ -185,14 +194,20 @@ public final class MemoryStore implements AutoCloseable {
                     "SELECT DISTINCT owner FROM memories WHERE active = 1");
                 while (rs.next()) owners.add(rs.getString("owner"));
                 for (var owner : owners) {
-                    try { reflect(owner); } catch (Exception e) {
-                        log.debug("Reflection failed for {}", owner, e);
-                    }
+                    reflectSafely(owner);
                 }
             } catch (Exception e) {
                 log.debug("Scheduled reflection failed", e);
             }
         }, intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
+    }
+
+    private void reflectSafely(String owner) {
+        try {
+            reflect(owner);
+        } catch (Exception e) {
+            log.debug("Reflection failed for {}", owner, e);
+        }
     }
 
     // ---- Helpers ----
@@ -215,21 +230,21 @@ public final class MemoryStore implements AutoCloseable {
     @SuppressWarnings("unchecked")
     private List<String> parseJsonList(String json) {
         try {
-            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(json, List.class);
-        } catch (Exception e) { return List.of(); }
+            return JSON.readValue(json, List.class);
+        } catch (Exception _) { return List.of(); }
     }
 
     @SuppressWarnings("unchecked")
     private Map<String, String> parseJsonMap(String json) {
         try {
-            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(json, Map.class);
-        } catch (Exception e) { return Map.of(); }
+            return JSON.readValue(json, Map.class);
+        } catch (Exception _) { return Map.of(); }
     }
 
     private String toJson(Object obj) {
         try {
-            return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(obj);
-        } catch (Exception e) { return obj instanceof List ? "[]" : "{}"; }
+            return JSON.writeValueAsString(obj);
+        } catch (Exception _) { return obj instanceof List ? "[]" : "{}"; }
     }
 
     @Override

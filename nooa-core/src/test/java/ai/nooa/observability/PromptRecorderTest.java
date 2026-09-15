@@ -10,6 +10,7 @@ import org.junit.jupiter.api.*;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.List;
 import java.util.Map;
 
@@ -26,15 +27,22 @@ class PromptRecorderTest {
     private Path tempDir;
 
     @BeforeEach
-    void setUp() throws Exception {
-        tempDir = Files.createTempDirectory("nooa-prompt-recorder-test");
+    void setUp() throws java.io.IOException {
+        tempDir = Files.createTempDirectory("nooa-prompt-recorder-test",
+            PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
     }
 
     @AfterEach
-    void tearDown() throws Exception {
+    void tearDown() throws java.io.IOException {
         try (var files = Files.walk(tempDir)) {
             files.sorted(java.util.Comparator.reverseOrder())
-                .forEach(p -> { try { Files.deleteIfExists(p); } catch (Exception ignored) {} });
+                .forEach(p -> {
+                    try {
+                        Files.deleteIfExists(p);
+                    } catch (Exception _) {
+                        // Best-effort cleanup for temporary test files.
+                    }
+                });
         }
     }
 
@@ -99,7 +107,7 @@ class PromptRecorderTest {
 
     @Test
     @DisplayName("ignores non-PromptBuilt events")
-    void ignoresNonPromptEvents() throws Exception {
+    void ignoresNonPromptEvents() {
         var agent = new TestAgent(new FakeLLMClient());
         var file = tempDir.resolve("prompts.jsonl");
         var recorder = PromptRecorder.attach(agent, file);
@@ -160,8 +168,8 @@ class PromptRecorderTest {
 
             var lines = Files.readAllLines(file);
             assertThat(lines).hasSize(2);
-            assertThat(recorder.parseLine(lines.get(0)).get("run_id").asText()).isEqualTo("run-1");
-            assertThat(recorder.parseLine(lines.get(1)).get("attempt").asInt()).isEqualTo(2);
+            assertThat(PromptRecorder.parseLine(lines.get(0)).get("run_id").asText()).isEqualTo("run-1");
+            assertThat(PromptRecorder.parseLine(lines.get(1)).get("attempt").asInt()).isEqualTo(2);
             assertThat(recorder.count()).isEqualTo(2);
         }
 
@@ -178,7 +186,7 @@ class PromptRecorderTest {
         var file = tempDir.resolve("prompts.jsonl");
         var current = new Object() { String stage = "stage-1"; };
 
-        var recorder = PromptRecorder.attach(agent, file, event -> Map.of("stage", current.stage));
+        PromptRecorder.attach(agent, file, event -> Map.of("stage", current.stage));
         agent.eventManager().add(new Event.PromptBuilt(
             "m", List.of(Message.user("one")), List.of(), null, Map.of(), true));
         current.stage = "stage-2";
@@ -186,8 +194,8 @@ class PromptRecorderTest {
             "m", List.of(Message.user("two")), List.of(), null, Map.of(), true));
 
         var lines = Files.readAllLines(file);
-        assertThat(recorder.parseLine(lines.get(0)).get("stage").asText()).isEqualTo("stage-1");
-        assertThat(recorder.parseLine(lines.get(1)).get("stage").asText()).isEqualTo("stage-2");
+        assertThat(PromptRecorder.parseLine(lines.get(0)).get("stage").asText()).isEqualTo("stage-1");
+        assertThat(PromptRecorder.parseLine(lines.get(1)).get("stage").asText()).isEqualTo("stage-2");
     }
 
     @Test
@@ -195,14 +203,14 @@ class PromptRecorderTest {
     void linesAreValidJsonObjects() throws Exception {
         var agent = new TestAgent(new FakeLLMClient());
         var file = tempDir.resolve("prompts.jsonl");
-        var recorder = PromptRecorder.attach(agent, file, event -> Map.of("x", "has \"quotes\" and\nnewline"));
+        PromptRecorder.attach(agent, file, event -> Map.of("x", "has \"quotes\" and\nnewline"));
 
         agent.eventManager().add(new Event.PromptBuilt(
             "m", List.of(Message.system("sys with\nnewline"), Message.user("hi \"there\"")),
             List.of("toolA"), null, Map.of("temperature", 0.2), true));
 
         for (String line : Files.readAllLines(file)) {
-            var node = recorder.parseLine(line);
+            var node = PromptRecorder.parseLine(line);
             assertThat(node.isObject()).isTrue();
             assertThat(node.has("event_id")).isTrue();
             assertThat(node.has("timestamp")).isTrue();
@@ -237,9 +245,9 @@ class PromptRecorderTest {
 
         assertThat(recorder.count()).isEqualTo(threads * perThread);
         var lines = Files.readAllLines(file);
-        assertThat(lines.size()).isEqualTo(threads * perThread);
+        assertThat(lines).hasSize(threads * perThread);
         for (String line : lines) {
-            assertThat(recorder.parseLine(line).isObject()).isTrue();
+            assertThat(PromptRecorder.parseLine(line).isObject()).isTrue();
         }
     }
 
@@ -265,7 +273,7 @@ class PromptRecorderTest {
 
         assertThat(recorder.count()).isEqualTo(3);
         assertThat(recorder.writeFailures()).isEqualTo(2);
-        assertThat(recorder.recorded().size()).isEqualTo(3);
+        assertThat(recorder.recorded()).hasSize(3);
     }
 
     @Test
@@ -275,7 +283,9 @@ class PromptRecorderTest {
         var dir = tempDir.resolve("existing-directory");
         try {
             java.nio.file.Files.createDirectories(dir);
-        } catch (java.io.IOException ignored) { }
+        } catch (java.io.IOException _) {
+            // The test only needs the directory to exist; creation may already be satisfied.
+        }
 
         var recorder = PromptRecorder.attach(agent, dir);
 
@@ -283,6 +293,6 @@ class PromptRecorderTest {
             "m", List.of(Message.user("one")), List.of(), null, Map.of(), true));
 
         assertThat(recorder.count()).isEqualTo(1);
-        assertThat(recorder.recorded().size()).isEqualTo(1);
+        assertThat(recorder.recorded()).hasSize(1);
     }
 }

@@ -30,6 +30,7 @@ public final class EventManager {
         ThreadLocal.withInitial(ArrayDeque::new);
     private final Map<UUID, UUID> eventCallIds = new ConcurrentHashMap<>();
 
+    /** Append an event, associate it with the active scope, and notify listeners. */
     public void add(Event event) {
         events.add(event);
         Deque<Scope> scopes = scopeStarts.get();
@@ -45,10 +46,12 @@ public final class EventManager {
         }
     }
 
+    /** Return an immutable snapshot of the complete event history. */
     public List<Event> all() {
         return List.copyOf(events);
     }
 
+    /** Return an immutable snapshot from an index onward; out-of-range indexes yield an empty list. */
     public List<Event> since(int index) {
         if (index < 0) { index = 0; }
         var snapshot = events;
@@ -56,20 +59,22 @@ public final class EventManager {
         return List.copyOf(snapshot.subList(index, snapshot.size()));
     }
 
+    /** Return the number of events currently stored. */
     public int size() {
         return events.size();
     }
 
-    /** Start a nested view containing events added after this point. */
+    /** Begin a nested event scope using a generated call ID. */
     public void beginScope() {
         beginScope(UUID.randomUUID());
     }
 
+    /** Begin a nested event scope associated with the supplied call ID. */
     public void beginScope(UUID callId) {
         scopeStarts.get().push(new Scope(events.size(), callId));
     }
 
-    /** End the current nested event view. */
+    /** End the current scope; calling this outside a scope is a no-op. */
     public void endScope() {
         Deque<Scope> scopes = scopeStarts.get();
         if (!scopes.isEmpty()) {
@@ -80,21 +85,24 @@ public final class EventManager {
         }
     }
 
-    /** Events emitted since the current call scope began. */
+    /** Return events emitted in the current scope, or all events outside a scope. */
     public List<Event> current() {
         Deque<Scope> scopes = scopeStarts.get();
         return scopes.isEmpty() ? all() : since(scopes.peek().start());
     }
 
+    /** Return the current scope's call ID, or {@code null} outside a scope. */
     public UUID currentCallId() {
         Deque<Scope> scopes = scopeStarts.get();
         return scopes.isEmpty() ? null : scopes.peek().callId();
     }
 
+    /** Return the call ID associated with an event, or {@code null} if it was outside a scope. */
     public UUID callId(Event event) {
         return eventCallIds.get(event.id());
     }
 
+    /** Return events associated with a call ID; {@code null} returns an empty list. */
     public List<Event> forCall(UUID callId) {
         if (callId == null) {
             return List.of();
@@ -104,12 +112,13 @@ public final class EventManager {
             .toList();
     }
 
+    /** Remove all events and their call associations. */
     public void clear() {
         events.clear();
         eventCallIds.clear();
     }
 
-    /** Clear events in range [from, to). */
+    /** Remove events in the half-open range {@code [from, to)}. Invalid ranges are ignored. */
     public void clearRange(int from, int to) {
         if (from < 0 || to > events.size() || from >= to) return;
         var snapshot = new ArrayList<>(events);
@@ -119,7 +128,7 @@ public final class EventManager {
         eventCallIds.keySet().retainAll(snapshot.stream().map(Event::id).toList());
     }
 
-    /** Insert an event at a specific index. */
+    /** Insert an event at a specific valid index; the inserted event has no call association. */
     public void insertAt(int index, Event event) {
         var snapshot = new ArrayList<>(events);
         snapshot.add(index, event);
@@ -128,6 +137,7 @@ public final class EventManager {
         eventCallIds.keySet().retainAll(snapshot.stream().map(Event::id).toList());
     }
 
+    /** Register a listener notified synchronously after each event is appended. */
     public void onEvent(Consumer<Event> listener) {
         listeners.add(listener);
     }
@@ -176,7 +186,9 @@ public final class EventManager {
             switch (e) {
                 case Event.Task t -> sb.append(t.content());
                 case Event.LLMOutput o -> sb.append(o.content() != null ? o.content() : "");
-                default -> {}
+                default -> {
+                    // Lifecycle events do not contribute text to the summary.
+                }
             }
         }
         return sb.toString();

@@ -33,32 +33,32 @@ class ReflexionStrategyTest {
     @DisplayName("reflexion passes through successful first result")
     void passesThroughSuccessfulResult() throws Exception {
         var llm = new FakeLLMClient();
-        var agent = new TestAgent(llm);
+        try (var agent = new TestAgent(llm)) {
 
-        // Base strategy: returnResult
-        llm.respondWith(List.of(
-            new LLMResponse.ToolCall("c1", "returnResult", Map.of("value", "good"))));
+            // Base strategy: returnResult
+            llm.respondWith(List.of(
+                new LLMResponse.ToolCall("c1", "returnResult", Map.of("value", "good"))));
 
-        var reflexion = new ReflexionStrategy(
-            new CodeActStrategy(ai.nooa.config.CodeActConfig.defaults()), 2);
+            var reflexion = new ReflexionStrategy(
+                new CodeActStrategy(ai.nooa.config.CodeActConfig.defaults()), 2);
 
-        var call = CurrentCall.fromMethod(
-            TestAgent.class.getDeclaredMethod("generate", String.class),
-            new Object[]{"test"});
+            var call = CurrentCall.fromMethod(
+                TestAgent.class.getDeclaredMethod("generate", String.class),
+                new Object[]{"test"});
 
-        // Reflection call will also try to generate — need another response for critique
-        llm.respondWith("OK"); // critique says OK → stops
+            // Reflection call will also try to generate — need another response for critique
+            llm.respondWith("OK"); // critique says OK -> stops
 
-        var result = reflexion.execute(agent.runtime(), call);
-        assertThat(result).isNotNull();
+            var result = reflexion.execute(agent.runtime(), call);
+            assertThat(result).isNotNull();
+        }
     }
 
     @Test
     @DisplayName("reflection prompt includes the result and evaluation instruction")
     void reflectionPromptIncludesResult() throws Exception {
         var llm = new FakeLLMClient();
-        var agent = new TestAgent(llm);
-        try {
+        try (var agent = new TestAgent(llm)) {
             llm.respondWith(List.of(
                 new LLMResponse.ToolCall("c1", "returnResult", Map.of("value", "good"))));
             llm.respondWith("{\"satisfactory\":true,\"reasoning\":\"valid\",\"issues\":[],\"suggestions\":[]}");
@@ -76,8 +76,6 @@ class ReflexionStrategyTest {
                     && message.content().contains("Result to evaluate:")
                     && message.content().contains("good")
                     && message.content().contains("Return JSON with fields satisfactory"));
-        } finally {
-            agent.close();
         }
     }
 
@@ -85,8 +83,7 @@ class ReflexionStrategyTest {
     @DisplayName("structured critique is included in the next attempt")
     void structuredCritiqueFeedsNextAttempt() throws Exception {
         var llm = new FakeLLMClient();
-        var agent = new TestAgent(llm);
-        try {
+        try (var agent = new TestAgent(llm)) {
             llm.respondWith(List.of(
                 new LLMResponse.ToolCall("c1", "returnResult", Map.of("value", "first"))));
             llm.respondWith("{\"satisfactory\":false,\"reasoning\":\"needs work\","
@@ -106,8 +103,6 @@ class ReflexionStrategyTest {
                     && feedback.content().contains("needs work")
                     && feedback.content().contains("missing detail")
                     && feedback.content().contains("add detail"));
-        } finally {
-            agent.close();
         }
     }
 }

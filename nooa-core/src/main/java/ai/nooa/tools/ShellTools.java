@@ -53,22 +53,27 @@ public final class ShellTools implements AutoCloseable {
         }
     }
 
+    /**
+     * Run a shell command in the workspace, enforcing permissions and capturing
+     * stdout/stderr. A timeout or failure is represented by exit code {@code -1}.
+     */
     public ShellResult run(String command) {
         return run(command, 60);
     }
 
+    /** Run a shell command with a timeout in seconds. */
     public ShellResult run(String command, int timeoutSeconds) {
         // Check permissions
         var level = permissions.checkCommand(command);
         if (level == Permissions.Level.DENY) {
             return new ShellResult("", "Permission denied: " + command, -1);
         }
-        if (level == Permissions.Level.ASK && permissionCallback != null) {
-            if (!permissionCallback.approve("command", command)) {
-                return new ShellResult("", "User denied: " + command, -1);
-            }
+        if (level == Permissions.Level.ASK && permissionCallback != null
+            && !permissionCallback.approve("command", command)) {
+            return new ShellResult("", "User denied: " + command, -1);
         }
 
+        Path tempDir = null;
         Path outFile = null;
         Path errFile = null;
         try {
@@ -76,8 +81,11 @@ public final class ShellTools implements AutoCloseable {
             // surefire fork spawned by `mvn`) can inherit the pipe fd and keep it
             // open after the parent exits, making readAllBytes() block forever.
             // Files cannot block the reader the same way.
-            outFile = Files.createTempFile("nooa-shell-out", ".log");
-            errFile = Files.createTempFile("nooa-shell-err", ".log");
+            tempDir = Files.createTempDirectory(workspace, ".nooa-shell-");
+            outFile = tempDir.resolve("stdout.log");
+            errFile = tempDir.resolve("stderr.log");
+            Files.createFile(outFile);
+            Files.createFile(errFile);
 
             var pb = new ProcessBuilder("/bin/bash", "-c", command)
                 .directory(workspace.toFile())
@@ -87,29 +95,29 @@ public final class ShellTools implements AutoCloseable {
             currentProcess = pb.start();
             Process proc = currentProcess;
 
-            boolean finished;
-            try {
-                finished = proc.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                killTree(proc);
-                return new ShellResult("", "Interrupted", -1);
-            }
-
-            if (!finished) {
-                killTree(proc);
-                return new ShellResult(readFile(outFile),
-                    readFile(errFile) + "\n[KILLED: timeout after " + timeoutSeconds + "s]", -1);
-            }
-
-            int exitCode = proc.exitValue();
-            return new ShellResult(readFile(outFile), readFile(errFile), exitCode);
+            return await(proc, outFile, errFile, timeoutSeconds);
         } catch (Exception e) {
             return new ShellResult("", e.getMessage(), -1);
         } finally {
             currentProcess = null;
             deleteQuietly(outFile);
             deleteQuietly(errFile);
+            deleteQuietly(tempDir);
+        }
+    }
+
+    private static ShellResult await(Process proc, Path outFile, Path errFile, int timeoutSeconds) {
+        try {
+            if (!proc.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+                killTree(proc);
+                return new ShellResult(readFile(outFile),
+                    readFile(errFile) + "\n[KILLED: timeout after " + timeoutSeconds + "s]", -1);
+            }
+            return new ShellResult(readFile(outFile), readFile(errFile), proc.exitValue());
+        } catch (InterruptedException _) {
+            Thread.currentThread().interrupt();
+            killTree(proc);
+            return new ShellResult("", "Interrupted", -1);
         }
     }
 
@@ -119,7 +127,8 @@ public final class ShellTools implements AutoCloseable {
         }
         try {
             proc.descendants().forEach(ProcessHandle::destroyForcibly);
-        } catch (Exception ignored) {
+        } catch (Exception _) {
+            // The process is forcibly destroyed below even if descendant lookup fails.
         }
         proc.destroyForcibly();
     }
@@ -127,7 +136,7 @@ public final class ShellTools implements AutoCloseable {
     private static String readFile(Path path) {
         try {
             return Files.readString(path);
-        } catch (IOException e) {
+        } catch (IOException _) {
             return "";
         }
     }
@@ -136,12 +145,13 @@ public final class ShellTools implements AutoCloseable {
         if (path != null) {
             try {
                 Files.deleteIfExists(path);
-            } catch (IOException ignored) {
+            } catch (IOException _) {
+                // Cleanup is best effort after command execution has completed.
             }
         }
     }
 
-    /** Read a file relative to the workspace. */
+    /** Read a file relative to the workspace; path escapes and I/O failures become error text. */
     public String read(String path) {
         try {
             Path resolved = workspace.resolve(path).normalize();
@@ -154,7 +164,7 @@ public final class ShellTools implements AutoCloseable {
         }
     }
 
-    /** Write content to a file relative to the workspace. */
+    /** Write content to a workspace-relative file, rejecting path escapes and creating parents. */
     public void writeFile(String path, String content) {
         try {
             Path resolved = workspace.resolve(path).normalize();
@@ -168,7 +178,7 @@ public final class ShellTools implements AutoCloseable {
         }
     }
 
-    /** View a file (read-only, truncation safe). */
+    /** View a workspace-relative file, truncating successful results after 2,000 characters. */
     public String view(String path) {
         String content = read(path);
         if (content.startsWith("[ERROR")) return content;
@@ -179,9 +189,11 @@ public final class ShellTools implements AutoCloseable {
         return content;
     }
 
+    /** Return the workspace directory used for commands and file operations. */
     public Path workspace() { return workspace; }
 
     @Override
+    /** Terminate an active command process, if any. */
     public void close() {
         if (currentProcess != null) {
             currentProcess.destroyForcibly();

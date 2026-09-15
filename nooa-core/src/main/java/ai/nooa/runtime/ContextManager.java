@@ -26,6 +26,7 @@ public final class ContextManager {
         // Subclasses register protected blocks via registerProtected()
     }
 
+    /** Register a framework-owned block that user code cannot replace or remove. */
     public void registerProtected(String key, ContextBlock block) {
         protectedBlocks.put(key, block);
     }
@@ -81,7 +82,10 @@ public final class ContextManager {
         return render(agent, Integer.MAX_VALUE);
     }
 
-    /** Render blocks with a hard character bound, preserving block order. */
+    /**
+     * Render blocks with a hard character bound, preserving protected blocks
+     * before user blocks and appending a truncation marker when necessary.
+     */
     public String render(Agent agent, int maxChars) {
         StringBuilder sb = new StringBuilder();
 
@@ -124,6 +128,7 @@ public final class ContextManager {
         };
     }
 
+    /** Return a snapshot containing protected blocks followed by user blocks. */
     public Map<String, ContextBlock> allBlocks() {
         Map<String, ContextBlock> all = new LinkedHashMap<>();
         all.putAll(protectedBlocks);

@@ -3,7 +3,7 @@ package ai.nooa.strategy;
 import ai.nooa.GenerationError;
 import ai.nooa.config.PredictConfig;
 import ai.nooa.llm.LLMResponse;
-import ai.nooa.llm.Message;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import java.util.List;
 import java.util.Map;
 import java.lang.reflect.Type;
@@ -63,9 +63,8 @@ public final class PredictStrategy implements GenerationStrategy {
         if (!(type instanceof Class<?> clazz) || !clazz.isRecord()) {
             return "JSON array";
         }
-        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         return String.join(", ", java.util.Arrays.stream(clazz.getRecordComponents())
-            .map(component -> component.getName()) // JSON property names typically match
+            .map(java.lang.reflect.RecordComponent::getName)
             .toList());
     }
 
@@ -91,7 +90,8 @@ public final class PredictStrategy implements GenerationStrategy {
             if (raw != null) {
                 try {
                     params.putIfAbsent("max_tokens", Integer.parseInt(raw.trim()));
-                } catch (NumberFormatException ignored) {
+                } catch (NumberFormatException _) {
+                    // An invalid optional override falls back to the provider default.
                 }
             }
         }
@@ -106,7 +106,8 @@ public final class PredictStrategy implements GenerationStrategy {
         return params;
     }
 
-    private Object parseResponse(String content, Type returnType) throws Exception {
+    @SuppressWarnings("java:S1166")
+    private Object parseResponse(String content, Type returnType) throws JsonProcessingException {
         if (returnType == String.class || returnType == CharSequence.class) {
             return content.strip();
         }
@@ -123,23 +124,23 @@ public final class PredictStrategy implements GenerationStrategy {
      * half-populated result.
      */
     private void validateRecordComponents(Object value, Type returnType) {
-        if (!(value instanceof Record record)) {
+        if (!(value instanceof Record parsedRecord)) {
             return;
         }
-        for (var component : record.getClass().getRecordComponents()) {
+        for (var component : parsedRecord.getClass().getRecordComponents()) {
             try {
-                component.getAccessor().setAccessible(true);
-                if (component.getAccessor().invoke(record) == null) {
+                if (component.getAccessor().invoke(parsedRecord) == null) {
                     throw new GenerationError("Field '" + component.getName()
                         + "' is missing or null in the response for "
                         + displayType(returnType));
                 }
-            } catch (ReflectiveOperationException e) {
+            } catch (ReflectiveOperationException _) {
                 // Cannot inspect; accept the value rather than fail closed.
             }
         }
     }
 
+    @SuppressWarnings("java:S3776")
     private String extractJson(String content) {
         if (content == null) {
             return "";

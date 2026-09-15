@@ -1,12 +1,10 @@
 package ai.nooa.tools;
 
-import org.junit.jupiter.api.*;
-
-import ai.nooa.tools.ShellTools;
 import ai.nooa.security.Permissions;
 import org.junit.jupiter.api.*;
 
 import java.nio.file.*;
+import java.nio.file.attribute.PosixFilePermissions;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -17,18 +15,23 @@ class ShellToolsTest {
     private ShellTools shell;
 
     @BeforeEach
-    void setUp() throws Exception {
-        workspace = Files.createTempDirectory("nooa-shell-test");
+    void setUp() throws java.io.IOException {
+        workspace = Files.createTempDirectory("nooa-shell-test",
+            PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
         shell = new ShellTools(workspace,
             Permissions.allowAll(), null); // allow all for testing
     }
 
     @AfterEach
-    void tearDown() throws Exception {
+    void tearDown() throws java.io.IOException {
         shell.close();
-        Files.walk(workspace)
-            .sorted(java.util.Comparator.reverseOrder())
-            .forEach(p -> { try { Files.deleteIfExists(p); } catch (Exception ignored) {} });
+        try (var paths = Files.walk(workspace)) {
+            paths.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+                try { Files.deleteIfExists(p); } catch (java.io.IOException _) {
+                    // Best-effort cleanup for temporary test files.
+                }
+            });
+        }
     }
 
     @Test
@@ -36,7 +39,7 @@ class ShellToolsTest {
     void runExecutesCommand() {
         var result = shell.run("echo hello");
         assertThat(result.stdout()).contains("hello");
-        assertThat(result.exitCode()).isEqualTo(0);
+        assertThat(result.exitCode()).isZero();
     }
 
     @Test
@@ -58,7 +61,9 @@ class ShellToolsTest {
     @DisplayName("view truncates long files")
     void viewTruncates() {
         var sb = new StringBuilder();
-        for (int i = 0; i < 500; i++) sb.append("line " + i + " abcdefghijklmnopqrstuvwxyz\n");
+        for (int i = 0; i < 500; i++) {
+            sb.append("line ").append(i).append(" abcdefghijklmnopqrstuvwxyz\n");
+        }
         shell.writeFile("big.txt", sb.toString());
         String viewed = shell.view("big.txt");
         assertThat(viewed.length()).isLessThan(sb.length());
@@ -88,6 +93,6 @@ class ShellToolsTest {
         // child died. File redirect must return as soon as the parent exits.
         var result = shell.run("sleep 60 & echo done", 10);
         assertThat(result.stdout()).contains("done");
-        assertThat(result.exitCode()).isEqualTo(0);
+        assertThat(result.exitCode()).isZero();
     }
 }

@@ -10,8 +10,6 @@ import ai.nooa.llm.Tool;
 import ai.nooa.llm.UnifiedLLM;
 import ai.nooa.strategy.CurrentCall;
 import ai.nooa.strategy.GenerationStrategy;
-import ai.nooa.strategy.RuntimeServices;
-import ai.nooa.runtime.CallMiddleware;
 import ai.nooa.runtime.sandbox.SandboxExecutor;
 import org.junit.jupiter.api.*;
 
@@ -20,6 +18,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.nio.file.Files;
+import java.nio.file.attribute.PosixFilePermissions;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -113,14 +112,11 @@ class ActorRuntimeTest {
     @Test
     @DisplayName("callPlan honors tracing configuration and @NoTrace")
     void callPlanHonorsTracingConfigurationAndNoTrace() throws Exception {
-        var traceDir = Files.createTempDirectory("nooa-actor-trace");
-        try {
-            ai.nooa.tracing.Tracing.enable(ai.nooa.tracing.Tracing.jsonl(traceDir));
-            var strategy = new GenerationStrategy() {
-                public Object execute(RuntimeServices rt, CurrentCall call) {
-                    return "done";
-                }
-            };
+        var traceDir = Files.createTempDirectory("nooa-actor-trace",
+            PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
+        try (var exporter = ai.nooa.tracing.Tracing.jsonl(traceDir)) {
+            ai.nooa.tracing.Tracing.enable(exporter);
+            GenerationStrategy strategy = (rt, call) -> "done";
 
             var noTraceCall = CurrentCall.fromMethod(
                 TestAgent.class.getDeclaredMethod("untraced", String.class),
@@ -129,21 +125,22 @@ class ActorRuntimeTest {
             ai.nooa.tracing.Tracing.shutdown();
             assertThat(Files.exists(traceDir.resolve("traces.jsonl"))).isFalse();
 
-            var disabledAgent = new TestAgent(llm, AgentConfig.defaults().withTracing(false));
-            try {
+            try (var disabledAgent = new TestAgent(llm, AgentConfig.defaults().withTracing(false))) {
                 var tracedCall = CurrentCall.fromMethod(
                     TestAgent.class.getDeclaredMethod("generate", String.class),
                     new Object[]{"test"});
                 disabledAgent.runtime().callPlan(strategy, tracedCall);
-            } finally {
-                disabledAgent.close();
             }
         } finally {
             ai.nooa.tracing.Tracing.shutdown();
             try (var files = Files.walk(traceDir)) {
                 files.sorted(java.util.Comparator.reverseOrder())
                     .forEach(path -> {
-                        try { Files.deleteIfExists(path); } catch (Exception ignored) { }
+                        try {
+                            Files.deleteIfExists(path);
+                        } catch (Exception _) {
+                            // Best-effort cleanup for temporary trace files.
+                        }
                     });
             }
         }
@@ -167,8 +164,9 @@ class ActorRuntimeTest {
             .map(m -> m.content() != null ? m.content() : "")
             .reduce("", (a, b) -> a + "\n" + b);
         assertThat(promptBuilt.redacted()).isTrue();
-        assertThat(promptText).doesNotContain("abc123");
-        assertThat(promptText).contains("[REDACTED]");
+        assertThat(promptText)
+            .doesNotContain("abc123")
+            .contains("[REDACTED]");
     }
 
     @Test
@@ -197,11 +195,9 @@ class ActorRuntimeTest {
     @DisplayName("callPlan adds Task and executes strategy")
     void callPlanAddsTask() throws Exception {
         var result = new AtomicBoolean(false);
-        var strategy = new GenerationStrategy() {
-            public Object execute(RuntimeServices rt, CurrentCall call) {
-                result.set(true);
-                return "done";
-            }
+        GenerationStrategy strategy = (rt, call) -> {
+            result.set(true);
+            return "done";
         };
         llm.respondWith("ok");
         var call = CurrentCall.fromMethod(
@@ -215,11 +211,9 @@ class ActorRuntimeTest {
     @DisplayName("callPlan includes method arguments in the prompt")
     void callPlanIncludesArguments() throws Exception {
         llm.respondWith("ok");
-        var strategy = new GenerationStrategy() {
-            public Object execute(RuntimeServices rt, CurrentCall call) {
-                rt.generate(List.of(), null, Map.of());
-                return "done";
-            }
+        GenerationStrategy strategy = (rt, call) -> {
+            rt.generate(List.of(), null, Map.of());
+            return "done";
         };
         var call = CurrentCall.fromMethod(
             TestAgent.class.getDeclaredMethod("generate", String.class),
@@ -296,15 +290,12 @@ class ActorRuntimeTest {
                 return request.withCode("int rewritten = 1;");
             }
         };
-        var configured = new TestAgent(llm, AgentConfig.defaults().withMiddleware(rewrite));
-        try {
+        try (var configured = new TestAgent(llm, AgentConfig.defaults().withMiddleware(rewrite))) {
             llm.respondWith("ok");
             assertThat(configured.runtime().generate(List.of(), null, Map.of())
                 .content()).isEqualTo("ok");
             assertThat(configured.runtime().executeCode("int original = 1;", Map.of()).success())
                 .isTrue();
-        } finally {
-            configured.close();
         }
     }
 
@@ -335,13 +326,10 @@ class ActorRuntimeTest {
                 return result;
             }
         };
-        var configured = new TestAgent(llm, AgentConfig.defaults().withMiddleware(hook));
-        try {
+        try (var configured = new TestAgent(llm, AgentConfig.defaults().withMiddleware(hook))) {
             llm.respondWith("ok");
             configured.runtime().generate(List.of(), null, Map.of());
             configured.runtime().executeCode("int x = 1;", Map.of());
-        } finally {
-            configured.close();
         }
 
         assertThat(beforeLlm).hasValue(1);

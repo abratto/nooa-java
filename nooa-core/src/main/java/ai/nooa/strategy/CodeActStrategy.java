@@ -23,23 +23,28 @@ public final class CodeActStrategy implements GenerationStrategy {
     private static final Logger log = LoggerFactory.getLogger(CodeActStrategy.class);
 
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final String EXECUTE_JAVA = "executeJava";
+    private static final String RETURN_RESULT = "returnResult";
+    private static final String STRING_TYPE = "string";
+    private static final String OBJECT_TYPE = "object";
+    private static final String VALUE_FIELD = "value";
 
     static final Tool EXECUTE_JAVA_TOOL = Tool.builder()
-        .name("executeJava")
+        .name(EXECUTE_JAVA)
         .description("""
             Execute Java code in the agent's environment. Variables and helper
             methods persist across calls. Access the live agent via `__agent__`
             (call `__agent__.methodName(...)`), and submit the final answer via
             `returnResult(value)`.""")
-        .parameter("code", "string", "Java source code to execute").build();
+        .parameter("code", STRING_TYPE, "Java source code to execute").build();
 
     static final Tool RETURN_RESULT_TOOL = Tool.builder()
-        .name("returnResult")
+        .name(RETURN_RESULT)
         .description("""
             Return the final result for the task. Call this ONLY when you have
             computed the final answer. The result must match the expected return
             type.""")
-        .parameter("value", "object", "The final result value").build();
+        .parameter(VALUE_FIELD, OBJECT_TYPE, "The final result value").build();
 
     private static final String STRATEGY_PROMPT = """
         ## Strategy
@@ -112,18 +117,18 @@ public final class CodeActStrategy implements GenerationStrategy {
             return RETURN_RESULT_TOOL;
         }
         Map<String, Object> inputSchema = new LinkedHashMap<>();
-        inputSchema.put("type", "object");
-        inputSchema.put("properties", Map.of("value", schemaFor(returnType)));
-        inputSchema.put("required", List.of("value"));
+        inputSchema.put("type", OBJECT_TYPE);
+        inputSchema.put("properties", Map.of(VALUE_FIELD, schemaFor(returnType)));
+        inputSchema.put("required", List.of(VALUE_FIELD));
         String description = "Return the final result for the task. Call this ONLY when you "
             + "have computed the final answer. Expected return type: "
             + returnType.getSimpleName() + ".";
-        return new Tool("returnResult", description, inputSchema);
+        return new Tool(RETURN_RESULT, description, inputSchema);
     }
 
     private static Map<String, Object> schemaFor(Class<?> type) {
         if (type == String.class || type == Character.class || type == char.class) {
-            return Map.of("type", "string");
+            return Map.of("type", STRING_TYPE);
         }
         if (type == boolean.class || type == Boolean.class) {
             return Map.of("type", "boolean");
@@ -138,17 +143,18 @@ public final class CodeActStrategy implements GenerationStrategy {
             return Map.of("type", "number");
         }
         if (type.isEnum()) {
-            return Map.of("type", "string");
+            return Map.of("type", STRING_TYPE);
         }
         if (type.isArray() || java.util.Collection.class.isAssignableFrom(type)) {
             return Map.of("type", "array", "items", Map.of());
         }
         try {
+            @SuppressWarnings("deprecation")
             var schema = JSON.generateJsonSchema(type);
             return JSON.convertValue(JSON.valueToTree(schema),
                 new TypeReference<Map<String, Object>>() {});
-        } catch (Exception e) {
-            return Map.of("type", "object");
+        } catch (Exception _) {
+            return Map.of("type", OBJECT_TYPE);
         }
     }
 
@@ -170,7 +176,7 @@ public final class CodeActStrategy implements GenerationStrategy {
             && (s.startsWith("{") || s.startsWith("["))) {
             try {
                 return JSON.readValue(s, JSON.constructType(returnType));
-            } catch (Exception ignored) {
+            } catch (Exception _) {
                 // Fall through to generic conversion.
             }
         }
@@ -198,6 +204,7 @@ public final class CodeActStrategy implements GenerationStrategy {
     public CodeActStrategy(CodeActConfig config) { this.config = config; }
 
     @Override
+    @SuppressWarnings("java:S3776")
     public Object execute(RuntimeServices runtime, CurrentCall call) {
         int iteration = 0;
         int textOnlyCount = 0;
@@ -304,7 +311,7 @@ public final class CodeActStrategy implements GenerationStrategy {
         String normalizedTool = normalizeToolName(tc.name());
         runtime.eventManager().add(new Event.ToolCallEvent(normalizedTool, tc.arguments()));
         return switch (normalizedTool) {
-            case "executeJava" -> {
+            case EXECUTE_JAVA -> {
                 String code = (String) tc.arguments().getOrDefault("code", "");
                 ExecutionResult result = runtime.executeCode(code, Map.of());
                 runtime.eventManager().add(new Event.ExecutionOutput(
@@ -318,8 +325,8 @@ public final class CodeActStrategy implements GenerationStrategy {
                 }
                 yield null;
             }
-            case "returnResult" -> {
-                Object value = tc.arguments().get("value");
+            case RETURN_RESULT -> {
+                Object value = tc.arguments().get(VALUE_FIELD);
                 runtime.eventManager().add(new Event.ToolResultEvent(
                     tc.id(), normalizedTool, value != null ? value.toString() : "null"));
                 if (value == null) {
@@ -360,8 +367,8 @@ public final class CodeActStrategy implements GenerationStrategy {
             .replace("-", "");
 
         return switch (normalized) {
-            case "executejava", "executepython", "java", "runjava", "execjava" -> "executeJava";
-            case "returnresult", "return", "finalresult", "respond", "response" -> "returnResult";
+            case "executejava", "executepython", "java", "runjava", "execjava" -> EXECUTE_JAVA;
+            case "returnresult", "return", "finalresult", "respond", "response" -> RETURN_RESULT;
             default -> name;
         };
     }

@@ -21,22 +21,22 @@ public sealed interface Event
     /** Role: "user", "assistant", or "system". */
     default String role() {
         return switch (this) {
-            case Task t -> "user";
-            case LLMOutput o -> "assistant";
-            case ExecutionOutput eo -> "user";
-            case ErrorEvent ee -> "user";
-            case ToolCallEvent tc -> "assistant";
-            case ToolResultEvent tr -> "user";
-            case BeforeTurn bt -> "system";
-            case AfterTurn at -> "system";
-            case BeforeAgentCall bc -> "system";
-            case AfterAgentCall ac -> "system";
-            case LLMCallStart ls -> "system";
-            case LLMCallEnd le -> "system";
-            case Feedback f -> "user";
-            case Summary s -> "assistant";
-            case LLMComplete lc -> "system";
-            case PromptBuilt pb -> "system";
+            case Task _ -> "user";
+            case LLMOutput _ -> "assistant";
+            case ExecutionOutput _ -> "user";
+            case ErrorEvent _ -> "user";
+            case ToolCallEvent _ -> "assistant";
+            case ToolResultEvent _ -> "user";
+            case BeforeTurn _ -> "system";
+            case AfterTurn _ -> "system";
+            case BeforeAgentCall _ -> "system";
+            case AfterAgentCall _ -> "system";
+            case LLMCallStart _ -> "system";
+            case LLMCallEnd _ -> "system";
+            case Feedback _ -> "user";
+            case Summary _ -> "assistant";
+            case LLMComplete _ -> "system";
+            case PromptBuilt _ -> "system";
         };
     }
 

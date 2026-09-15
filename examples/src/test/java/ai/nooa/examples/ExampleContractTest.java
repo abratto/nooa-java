@@ -6,7 +6,6 @@ import ai.nooa.llm.FakeLLMClient;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
-import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

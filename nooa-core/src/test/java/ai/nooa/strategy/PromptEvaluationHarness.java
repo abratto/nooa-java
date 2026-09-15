@@ -8,50 +8,18 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class PromptEvaluationHarness {
+    private static final Logger log = LoggerFactory.getLogger(PromptEvaluationHarness.class);
 
-    public static final class TaskSpec {
-        private final String id;
-        private final String instruction;
-        private final String input;
-        private final String expected;
+    private PromptEvaluationHarness() {}
 
-        public TaskSpec(String id, String instruction, String input, String expected) {
-            this.id = id;
-            this.instruction = instruction;
-            this.input = input;
-            this.expected = expected;
-        }
+    public record TaskSpec(String id, String instruction, String input, String expected) {}
 
-        public String id() { return id; }
-        public String instruction() { return instruction; }
-        public String input() { return input; }
-        public String expected() { return expected; }
-    }
-
-    public static final class Result {
-        private final String taskId;
-        private final String variant;
-        private final double groundingScore;
-        private final long promptChars;
-        private final long latencyMs;
-
-        public Result(String taskId, String variant, double groundingScore, long promptChars, long latencyMs) {
-            this.taskId = taskId;
-            this.variant = variant;
-            this.groundingScore = groundingScore;
-            this.promptChars = promptChars;
-            this.latencyMs = latencyMs;
-        }
-
-        public String taskId() { return taskId; }
-        public String variant() { return variant; }
-        public double groundingScore() { return groundingScore; }
-        public long promptChars() { return promptChars; }
-        public long latencyMs() { return latencyMs; }
-    }
+    public record Result(String taskId, String variant, double groundingScore,
+                         long promptChars, long latencyMs) {}
 
     public static List<Result> run(List<TaskSpec> tasks) {
         var results = new ArrayList<Result>();
@@ -99,7 +67,10 @@ public final class PromptEvaluationHarness {
 
     public static void printSummary(List<Result> results) {
         for (var result : results) {
-            System.out.println(result.taskId() + " | " + result.variant() + " | grounding=" + String.format(Locale.ROOT, "%.3f", result.groundingScore()) + " | chars=" + result.promptChars() + " | latencyMs=" + result.latencyMs());
+            log.info("{} | {} | grounding={} | chars={} | latencyMs={}",
+                result.taskId(), result.variant(),
+                String.format(Locale.ROOT, "%.3f", result.groundingScore()),
+                result.promptChars(), result.latencyMs());
         }
     }
 

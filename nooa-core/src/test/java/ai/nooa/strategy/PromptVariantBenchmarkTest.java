@@ -2,7 +2,6 @@ package ai.nooa.strategy;
 
 import ai.nooa.Agent;
 import ai.nooa.annotations.Generate;
-import ai.nooa.llm.FakeLLMClient;
 import ai.nooa.llm.UnifiedLLM;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -45,7 +44,6 @@ class PromptVariantBenchmarkTest {
                 "The board approved a capex plan to expand data centers and hired a chief systems reliability officer to support a larger AI workload.")
         );
 
-        var llm = new FakeLLMClient();
         var baselineResults = new ArrayList<String>();
         var enrichedResults = new ArrayList<String>();
 

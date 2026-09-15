@@ -1,7 +1,6 @@
 package ai.nooa.examples;
 
 import ai.nooa.AgentFactory;
-import ai.nooa.llm.UnifiedLLM;
 
 import java.util.Map;
 
@@ -30,9 +29,10 @@ import java.util.Map;
  * try/finally, demonstrating the {@link Agent} {@code AutoCloseable} lifecycle
  * that releases sandbox resources.</p>
  */
+@SuppressWarnings({"java:S106", "java:S1172"})
 public final class QuickstartExamples {
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
         var llm = ExampleLLM.create();
 
         // Example 1: the most basic pattern — plain @Generate method.

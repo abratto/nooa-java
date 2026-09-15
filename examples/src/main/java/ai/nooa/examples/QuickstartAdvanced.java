@@ -1,7 +1,6 @@
 package ai.nooa.examples;
 
 import ai.nooa.AgentFactory;
-import ai.nooa.llm.UnifiedLLM;
 
 /**
  * Context and visibility: how the model sees agent state.
@@ -26,6 +25,7 @@ import ai.nooa.llm.UnifiedLLM;
  * or {@code examples/run.sh QuickstartAdvanced}. Requires a model endpoint
  * (local Ollama by default, see {@link ExampleLLM}).</p>
  */
+@SuppressWarnings({"java:S106", "java:S1172"})
 public final class QuickstartAdvanced {
     public static void main(String[] args) {
         var llm = ExampleLLM.create();
