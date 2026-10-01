@@ -24,12 +24,12 @@ Java 25+ · Maven 3.9+
 <dependency>
   <groupId>ai.nooa</groupId>
   <artifactId>nooa-core</artifactId>
-  <version>0.8.4</version>
+  <version>0.8.5</version>
 </dependency>
 ```
 
-For production use, pin to the released version (`0.8.4`); active development on
-`main` uses the `0.8.5-SNAPSHOT` version. To build locally and install into your
+For production use, pin to the released version (`0.8.5`); active development on
+`main` uses the `0.8.6-SNAPSHOT` version. To build locally and install into your
 local Maven repository:
 
 ```bash

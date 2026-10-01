@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.5 (2026-10-01)
+
+### Added
+- Scoped PIT mutation-testing gate (`scripts/mutation-score.sh`, PIT 1.30.0 + junit5 plugin 1.2.3) over `Permissions`, `CodePermissionAnalyzer`, and `ai.nooa.eval.*`, with a configurable threshold (baseline 56.9%, regression floor 55%). Not lifecycle-bound, so `mvn test` is unaffected.
+
 ## v0.8.4 (2026-10-01)
 
 ### Added
