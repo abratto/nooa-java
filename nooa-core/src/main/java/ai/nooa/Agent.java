@@ -141,6 +141,13 @@ public abstract class Agent implements AutoCloseable {
         return getClass().getSimpleName();
     }
 
+    /**
+     * Search this class and its superclasses for a {@link SystemPrompt}
+     * annotation.
+     *
+     * @return the first {@code @SystemPrompt} found walking up the class
+     *         hierarchy, or {@code null} if none is declared
+     */
     private static SystemPrompt findSystemPrompt(Class<?> cls) {
         for (Class<?> c = cls; c != null && c != Object.class; c = c.getSuperclass()) {
             SystemPrompt ann = c.getAnnotation(SystemPrompt.class);

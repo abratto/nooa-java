@@ -250,5 +250,13 @@ public final class MemoryStore implements AutoCloseable {
     @Override
     public void close() {
         reflectionExecutor.shutdownNow();
+        try {
+            if (!reflectionExecutor.awaitTermination(3, TimeUnit.SECONDS)) {
+                log.warn("Memory reflection executor did not terminate within timeout");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.debug("Interrupted while awaiting memory reflection shutdown", e);
+        }
     }
 }

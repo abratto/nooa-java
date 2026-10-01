@@ -3,12 +3,16 @@ package ai.nooa.mcp;
 import java.io.*;
 import java.util.List;
 import java.util.concurrent.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Stdio transport — spawns an MCP server as a subprocess and communicates
  * via stdin/stdout with newline-delimited JSON-RPC messages.
  */
 final class StdioTransport implements McpTransport {
+
+    private static final Logger log = LoggerFactory.getLogger(StdioTransport.class);
 
     private final Process process;
     private final BufferedWriter writer;
@@ -35,7 +39,7 @@ final class StdioTransport implements McpTransport {
                         try {
                             pending.put(JsonRpcMessage.deserialize(line));
                         } catch (Exception e) {
-                            // Skip malformed messages
+                            log.debug("Skipping malformed stdio JSON-RPC payload", e);
                         }
                     }
                 } catch (IOException e) {

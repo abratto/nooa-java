@@ -4,6 +4,7 @@ import ai.nooa.GenerationError;
 import ai.nooa.config.PredictConfig;
 import ai.nooa.llm.LLMResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
 import java.lang.reflect.Type;
@@ -12,6 +13,8 @@ import java.lang.reflect.Type;
  * Single-shot structured output strategy.
  */
 public final class PredictStrategy implements GenerationStrategy {
+
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final PredictConfig config;
 
@@ -111,8 +114,7 @@ public final class PredictStrategy implements GenerationStrategy {
         if (returnType == String.class || returnType == CharSequence.class) {
             return content.strip();
         }
-        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-        Object value = mapper.readValue(extractJson(content), mapper.constructType(returnType));
+        Object value = JSON.readValue(extractJson(content), JSON.constructType(returnType));
         validateRecordComponents(value, returnType);
         return value;
     }

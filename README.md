@@ -67,7 +67,7 @@ For the full example catalog, model configuration (local Ollama by default,
 <dependency>
   <groupId>ai.nooa</groupId>
   <artifactId>nooa-core</artifactId>
-    <version>0.6.0</version>
+    <version>0.7.0</version>
 </dependency>
 ```
 
@@ -75,14 +75,14 @@ For the full example catalog, model configuration (local Ollama by default,
 
 The SDK is intended to be consumed like any other Maven library artifact. The
 source of truth is this repository, and the published library coordinates are the
-core artifact from this build. For production use, pin to a released version
-(`0.6.0`); use the `-SNAPSHOT` version only for local development:
+core artifact from this build. For production use, pin to the released version
+(`0.7.0`); the same version is what this checkout builds and installs locally:
 
 ```xml
 <dependency>
   <groupId>ai.nooa</groupId>
   <artifactId>nooa-core</artifactId>
-    <version>0.7.0-SNAPSHOT</version>
+    <version>0.7.0</version>
 </dependency>
 ```
 

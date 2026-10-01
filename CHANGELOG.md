@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.7.1 (unreleased)
+
+### Changed
+- `PredictStrategy` reuses a single `private static final ObjectMapper JSON` instead of constructing a new mapper on every response parse
+- `MemoryStore.close()` now awaits reflection-executor termination (3s) after `shutdownNow()`, restoring the interrupt flag and logging on timeout, so a scheduled flush can no longer be silently dropped
+- Removed leftover empty directory trees (`nooa-core/.../runtime/{sandbox}`, `nooa-core/src/main/java/com`, and the root `tests/` scaffold)
+- Added SLF4J debug logging for malformed JSON-RPC payloads in `SseTransport` and `StdioTransport`; failures were previously swallowed silently
+- Documented the null-return contract of `Agent.findSystemPrompt()` and the timeout/interrupt behavior of `SseTransport.receive()`
+
+### Fixed
+- `SseTransport.connect()` now closes the HTTP response body stream when the SSE handshake returns non-200, fixing a connection leak
+- `SseTransport.close()` now closes the underlying SSE input stream, which is what unblocks the reader thread parked in `BufferedReader.readLine()`; the thread interrupt is retained as a secondary measure
+
 ## v0.6.0 (2026-09-13)
 
 ### Added

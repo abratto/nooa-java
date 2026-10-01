@@ -4,6 +4,8 @@ import java.io.*;
 import java.net.URI;
 import java.net.http.*;
 import java.util.concurrent.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * SSE (Server-Sent Events) transport for remote MCP servers.
@@ -11,11 +13,14 @@ import java.util.concurrent.*;
  */
 final class SseTransport implements McpTransport {
 
+    private static final Logger log = LoggerFactory.getLogger(SseTransport.class);
+
     private final HttpClient http;
     private final String sseUrl;
     private final String messageEndpoint;
     private final BlockingQueue<JsonRpcMessage> pending = new LinkedBlockingQueue<>();
     private volatile boolean connected = false;
+    private volatile InputStream sseStream;
     private Thread sseThread;
 
     SseTransport(String sseUrl) {
@@ -36,8 +41,18 @@ final class SseTransport implements McpTransport {
             HttpResponse<InputStream> response = http.send(req,
                 HttpResponse.BodyHandlers.ofInputStream());
 
-            connected = response.statusCode() == 200;
-            if (!connected) return;
+            if (response.statusCode() != 200) {
+                connected = false;
+                try {
+                    response.body().close();
+                } catch (IOException e) {
+                    log.debug("Failed to close SSE response body on non-200 status", e);
+                }
+                return;
+            }
+
+            this.sseStream = response.body();
+            connected = true;
 
             this.sseThread = Thread.ofVirtual().start(() -> {
                 try (var reader = new BufferedReader(
@@ -50,7 +65,9 @@ final class SseTransport implements McpTransport {
                         } else if (line.isBlank() && !data.isEmpty()) {
                             try {
                                 pending.put(JsonRpcMessage.deserialize(data.toString()));
-                            } catch (Exception ignored) {}
+                            } catch (Exception e) {
+                                log.debug("Skipping malformed SSE JSON-RPC payload", e);
+                            }
                             data.setLength(0);
                         }
                     }
@@ -81,6 +98,10 @@ final class SseTransport implements McpTransport {
         }
     }
 
+    /**
+     * Return the next message, or {@code null} on timeout (30s) or interrupt.
+     * On interrupt the calling thread's interrupt flag is restored.
+     */
     @Override
     public JsonRpcMessage receive() {
         try {
@@ -95,6 +116,15 @@ final class SseTransport implements McpTransport {
 
     @Override public void close() {
         connected = false;
+        // Closing the stream is what unblocks a reader parked in readLine().
+        var stream = sseStream;
+        if (stream != null) {
+            try {
+                stream.close();
+            } catch (IOException e) {
+                log.debug("Failed to close SSE stream", e);
+            }
+        }
         if (sseThread != null) sseThread.interrupt();
     }
 }
