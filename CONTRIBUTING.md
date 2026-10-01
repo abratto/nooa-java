@@ -33,6 +33,28 @@ mvn test                         # run all tests
 
 Requirements: Java 25+, Maven 3.9+
 
+## Mutation testing
+
+Mutation testing is the test-effectiveness signal for the security-critical and
+pure-logic packages. It is **not** part of `mvn test`; run it explicitly:
+
+```bash
+./scripts/mutation-score.sh            # prints MUTATION_SCORE: <pct>
+MUTATION_THRESHOLD=70 ./scripts/mutation-score.sh   # fail below 70%
+```
+
+- **Tooling:** PIT (`pitest-maven` 1.30.0) + `pitest-junit5-plugin` 1.2.3,
+  configured in `nooa-core/pom.xml` (not bound to a lifecycle phase). Runs on
+  JDK 25.
+- **Scope:** `ai.nooa.security.Permissions`,
+  `ai.nooa.runtime.sandbox.CodePermissionAnalyzer`, and `ai.nooa.eval.*`
+  (excluding the CLI, SQLite history, and the HTTP judge).
+- **Baseline:** 56.9% (2026-10-01). The gate floor is **55%** by default;
+  ratchet it upward as the scoped tests strengthen. `Permissions` is already
+  ~89% and `CodePermissionAnalyzer` ~68%.
+- `MUTATION_SKIP: <reason>` means the tool could not run (toolchain issue); it
+  is not a pass.
+
 ## Release
 
 Before tagging, run the release checklist:

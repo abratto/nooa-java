@@ -82,4 +82,48 @@
             <artifactId>slf4j-simple</artifactId>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Mutation testing is the test-effectiveness signal for the
+                 security-critical and pure-logic packages. Not bound to a
+                 lifecycle phase: `mvn test` is unaffected. Run it explicitly via
+                 scripts/mutation-score.sh (see CONTRIBUTING.md). -->
+            <plugin>
+                <groupId>org.pitest</groupId>
+                <artifactId>pitest-maven</artifactId>
+                <version>${pitest.version}</version>
+                <configuration>
+                    <targetClasses>
+                        <param>ai.nooa.security.Permissions</param>
+                        <param>ai.nooa.runtime.sandbox.CodePermissionAnalyzer</param>
+                        <param>ai.nooa.eval.*</param>
+                    </targetClasses>
+                    <excludedClasses>
+                        <param>ai.nooa.eval.cli.*</param>
+                        <param>ai.nooa.eval.EvalHistoryStore</param>
+                        <param>ai.nooa.eval.judge.LlmJudge</param>
+                    </excludedClasses>
+                    <targetTests>
+                        <param>ai.nooa.security.PermissionsTest</param>
+                        <param>ai.nooa.runtime.sandbox.CodePermissionAnalyzerTest</param>
+                        <param>ai.nooa.runtime.sandbox.PermissionBypassCorpusTest</param>
+                        <param>ai.nooa.eval.*Test</param>
+                    </targetTests>
+                    <outputFormats>
+                        <outputFormat>XML</outputFormat>
+                    </outputFormats>
+                    <timestampedReports>false</timestampedReports>
+                    <failWhenNoMutations>false</failWhenNoMutations>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.pitest</groupId>
+                        <artifactId>pitest-junit5-plugin</artifactId>
+                        <version>${pitest.junit5.plugin.version}</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
+        </plugins>
+    </build>
 </project>

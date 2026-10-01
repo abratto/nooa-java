@@ -27,6 +27,8 @@
         <junit.version>5.11.3</junit.version>
         <assertj.version>3.27.7</assertj.version>
         <mockito.version>5.14.2</mockito.version>
+        <pitest.version>1.30.0</pitest.version>
+        <pitest.junit5.plugin.version>1.2.3</pitest.junit5.plugin.version>
     </properties>
 
     <dependencyManagement>
