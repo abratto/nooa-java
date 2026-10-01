@@ -640,6 +640,31 @@ not change Java access control, erase a value from memory, or provide a security
 boundary for code execution. Use permissions and an external sandbox for those
 concerns.
 
+### 3a. Sandbox Permission Gate
+
+Generated CodeAct cells pass through a static permission gate before execution.
+`CodePermissionAnalyzer` parses each cell and resolves restricted API usage by
+AST node (imports, qualified types, object creations, reflection and sink calls,
+string literals) rather than substring matching, then decides ALLOW / ASK / DENY
+against the agent's `Permissions`:
+
+- restricted file, URL, command, and class-load APIs are denied unless an
+  explicit rule allows them;
+- wildcard imports of restricted packages, `Class.forName` built from pieces,
+  reflective methods, and non-literal arguments to sensitive sinks are caught;
+- dynamic resources route to the agent's `PermissionCallback` and are denied
+  when no callback is registered;
+- file checks resolve symlinks, so a link inside an allowed root cannot escape
+  it; every restricted resource in a cell must be allowed (fail closed);
+- each decision is emitted as a structured `Event.PermissionDecision` for audit
+  and exported through ATIF and snapshots.
+
+Guarantee level: this gate is a strong static/allow-list control for trusted or
+reviewed code, not a hostile-code isolation boundary. Applications executing
+untrusted model output must also use an isolated `SandboxExecutor` backend (or
+an equivalent external sandbox). See [docs/roadmap.md](docs/roadmap.md) for the
+staged hardening plan and the isolation stage.
+
 ### 4. Context Blocks and Events
 
 Context blocks are key-value pairs rendered into the system prompt before each LLM call. Events are the conversation history.

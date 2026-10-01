@@ -61,7 +61,24 @@ Known weaknesses, to be closed by the stages below:
   are emitted for every restricted finding. Existing `Permissions` allow
   rules (file/classLoad/url) still apply, and dynamic resources route to the
   `PermissionCallback` (deny when absent).
-- **Stages 2-5 — pending.**
+- **Stage 2 — implemented (in-process controls).** `Permissions` now resolves
+  symlinks before file checks (a link inside an allowed root cannot escape it)
+  and matches the most-specific rule regardless of insertion order. The
+  analyzer fails closed over every restricted resource in a cell, wires command
+  checks through `checkCommand`, and routes dynamic resources to the
+  `PermissionCallback` (deny when absent). True runtime sink interception is
+  not attempted in-process; that boundary is Stage 4 (isolated backend).
+- **Stage 3 — partial.** The ad-hoc `BLOCKED_PACKAGES` string set is replaced
+  by the analyzer's declarative restricted registry. Class-load default
+  tightening, tool-invocation gating, and cell resource budgets remain.
+- **Stage 4 — pending.** Reference isolated `SandboxExecutor` backend; required
+  for untrusted code.
+- **Stage 5 — implemented (except isolation-dependent items).** Named bypass
+  corpus (`PermissionBypassCorpusTest`) asserts DENY for string concat,
+  reflection, wildcard imports, base64/hex paths, and `ProcessBuilder` via
+  reflection. `Event.PermissionDecision` is exported through ATIF and
+  snapshots, and guarantee levels are documented in `README.md` and
+  `docs/sdk-versioning.md`.
 
 ## Current guards (out of scope for this plan, already present)
 

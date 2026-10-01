@@ -76,6 +76,12 @@ public final class AtifExporter implements AutoCloseable {
                 step.put("tool_names", pb.toolNames().toString());
                 step.put("messages", pb.messages().toString());
             }
+            case Event.PermissionDecision pd -> {
+                step.put("resource", pd.resource());
+                step.put("detail", pd.detail());
+                step.put("level", pd.level());
+                step.put("reason", pd.rule());
+            }
             default -> {}
         }
         steps.add(step);

@@ -153,6 +153,12 @@ public final class AgentSnapshot {
             }
             case Event.ErrorEvent ee -> map.put("message", ee.message());
             case Event.Feedback f -> map.put("content", f.content());
+            case Event.PermissionDecision pd -> {
+                map.put("resource", pd.resource());
+                map.put("detail", pd.detail());
+                map.put("level", pd.level());
+                map.put("reason", pd.rule());
+            }
             case Event.PromptBuilt pb -> {
                 map.put("modelName", pb.modelName());
                 map.put("toolNames", pb.toolNames());

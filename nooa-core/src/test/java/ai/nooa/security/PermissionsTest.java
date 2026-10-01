@@ -1,7 +1,10 @@
 package ai.nooa.security;
 
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.*;
@@ -99,6 +102,39 @@ class PermissionsTest {
 
         assertThat(perms.checkClassLoad("java.util.ArrayList")).isEqualTo(Permissions.Level.ALLOW);
         assertThat(perms.checkClassLoad("java.lang.reflect.Field")).isEqualTo(Permissions.Level.DENY);
+    }
+
+    @Test
+    @DisplayName("most-specific matching is order independent")
+    void orderIndependentSpecificity() {
+        var narrowFirst = new Permissions()
+            .file("/tmp/**", Permissions.Level.ALLOW)
+            .file("**", Permissions.Level.DENY);
+        var narrowLast = new Permissions()
+            .file("**", Permissions.Level.DENY)
+            .file("/tmp/**", Permissions.Level.ALLOW);
+
+        for (var perms : java.util.List.of(narrowFirst, narrowLast)) {
+            assertThat(perms.checkFile("/tmp/data.txt")).isEqualTo(Permissions.Level.ALLOW);
+            assertThat(perms.checkFile("/etc/passwd")).isEqualTo(Permissions.Level.DENY);
+        }
+    }
+
+    @Test
+    @DisplayName("symlinks cannot escape an allowed root")
+    void symlinkCannotEscapeAllowedRoot(@TempDir Path root) throws IOException {
+        Files.writeString(root.resolve("ok.txt"), "hi");
+        Path escape = root.resolve("escape");
+        try {
+            Files.createSymbolicLink(escape, Path.of("/etc"));
+        } catch (IOException | UnsupportedOperationException e) {
+            org.junit.jupiter.api.Assumptions.assumeTrue(false,
+                "symlinks unavailable on this filesystem");
+        }
+        var perms = new Permissions().file(root.toRealPath() + "/**", Permissions.Level.ALLOW);
+
+        assertThat(perms.checkFile(root.toRealPath().resolve("ok.txt"))).isEqualTo(Permissions.Level.ALLOW);
+        assertThat(perms.checkFile(escape.resolve("passwd"))).isEqualTo(Permissions.Level.DENY);
     }
 
     @Test

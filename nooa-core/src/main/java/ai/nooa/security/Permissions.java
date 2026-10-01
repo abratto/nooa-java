@@ -1,5 +1,7 @@
 package ai.nooa.security;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -38,38 +40,55 @@ public final class Permissions {
 
     /** Add a file glob permission rule. */
     public Permissions file(String glob, Level level) {
-        fileRules.add(new Rule(fileGlobToRegex(glob), level));
+        fileRules.add(new Rule(fileGlobToRegex(glob), level, glob));
         return this;
     }
 
     /** Add a shell command glob permission rule. */
     public Permissions command(String glob, Level level) {
-        commandRules.add(new Rule(globToRegex(glob), level));
+        commandRules.add(new Rule(globToRegex(glob), level, glob));
         return this;
     }
 
     /** Add a URL glob permission rule. */
     public Permissions url(String glob, Level level) {
-        urlRules.add(new Rule(globToRegex(glob), level));
+        urlRules.add(new Rule(globToRegex(glob), level, glob));
         return this;
     }
 
     /** Add a class loading permission rule. */
     public Permissions classLoad(String glob, Level level) {
-        classRules.add(new Rule(globToRegex(glob), level));
+        classRules.add(new Rule(globToRegex(glob), level, glob));
         return this;
     }
 
     // ---- Check methods ----
 
-    /** Check permission for a file path. Returns DENY if no rule matches. */
+    /** Check permission for a file path, resolving symlinks when the path exists. */
     public Level checkFile(Path path) {
-        return check(fileRules, path.toAbsolutePath().normalize().toString());
+        return check(fileRules, canonical(path).toString());
     }
 
-    /** Check permission for a file path string. */
+    /** Check permission for a file path string, resolving symlinks when it exists. */
     public Level checkFile(String path) {
-        return check(fileRules, Path.of(path).toAbsolutePath().normalize().toString());
+        return checkFile(Path.of(path));
+    }
+
+    /**
+     * Resolve a path to its canonical form so a symlink inside an allowed root
+     * cannot be used to escape it. Falls back to absolute normalization when
+     * the path does not exist or cannot be resolved.
+     */
+    private static Path canonical(Path path) {
+        Path normalized = path.toAbsolutePath().normalize();
+        try {
+            if (Files.exists(normalized)) {
+                return normalized.toRealPath();
+            }
+        } catch (IOException | RuntimeException _) {
+            // Fall back to the normalized path.
+        }
+        return normalized;
     }
 
     /** Check permission for a shell command. */
@@ -88,14 +107,32 @@ public final class Permissions {
     }
 
     private Level check(List<Rule> rules, String target) {
-        // Last matching rule wins (so specific rules override broad ones)
+        // Most-specific matching rule wins; ties break in favor of the rule
+        // added last, so narrow rules override broad ones regardless of order.
         Level result = Level.DENY;
+        int bestSpecificity = -1;
         for (Rule rule : rules) {
             if (rule.pattern().matcher(target).matches()) {
-                result = rule.level();
+                int specificity = specificity(rule.glob());
+                if (specificity >= bestSpecificity) {
+                    bestSpecificity = specificity;
+                    result = rule.level();
+                }
             }
         }
         return result;
+    }
+
+    /** Number of literal (non-wildcard) glob characters; more characters = more specific. */
+    private static int specificity(String glob) {
+        int count = 0;
+        for (int i = 0; i < glob.length(); i++) {
+            char c = glob.charAt(i);
+            if (c != '*' && c != '?') {
+                count++;
+            }
+        }
+        return count;
     }
 
     /** Convert a glob to regex. For commands, * matches anything (including spaces/slashes). */
@@ -145,7 +182,7 @@ public final class Permissions {
             .classLoad("*", Level.ALLOW);
     }
 
-    record Rule(Pattern pattern, Level level) {}
+    record Rule(Pattern pattern, Level level, String glob) {}
 
     @Override
     public String toString() {

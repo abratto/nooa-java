@@ -105,3 +105,7 @@ If a change affects the public Java SDK API or runtime behavior, it should be ac
 - a clear compatibility note for downstream consumers
 
 This keeps the SDK predictable for integration teams while preserving a clear boundary between the reusable framework and CLAD-specific application work.
+
+## Sandbox permission guarantees
+
+The in-process sandbox applies a static permission gate (AST-based `CodePermissionAnalyzer`) plus resolved-path file checks and deny-by-default `Permissions` rules. This is a strong static/allow-list control for trusted or reviewed code, not a hostile-code isolation boundary. Executing untrusted model output additionally requires an isolated `SandboxExecutor` backend or an equivalent external sandbox; see `docs/roadmap.md` for the staged hardening plan and guarantee levels.
