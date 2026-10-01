@@ -146,6 +146,15 @@ class JShellSandboxTest {
     }
 
     @Test
+    @DisplayName("captured output is bounded by a byte cap")
+    void capturedOutputIsBounded() {
+        var capture = new JShellSandbox.CappedOutputStream(8);
+        capture.write(new byte[20], 0, 20);
+        assertThat(capture.truncated()).isTrue();
+        assertThat(capture.toString()).hasSize(8);
+    }
+
+    @Test
     @DisplayName("close cleans up resources")
     void closeCleansUp() {
         SandboxContext.setAgent(new TestAgent(new FakeLLMClient()));

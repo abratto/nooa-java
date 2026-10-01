@@ -68,8 +68,10 @@ public final class ShellTools implements AutoCloseable {
         if (level == Permissions.Level.DENY) {
             return new ShellResult("", "Permission denied: " + command, -1);
         }
-        if (level == Permissions.Level.ASK && permissionCallback != null
-            && !permissionCallback.approve("command", command)) {
+        if (level == Permissions.Level.ASK
+            && (permissionCallback == null
+                || !permissionCallback.approve("command", command))) {
+            // Fail closed: an approval-required command with no callback is denied.
             return new ShellResult("", "User denied: " + command, -1);
         }
 

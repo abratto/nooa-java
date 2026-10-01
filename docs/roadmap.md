@@ -68,9 +68,14 @@ Known weaknesses, to be closed by the stages below:
   checks through `checkCommand`, and routes dynamic resources to the
   `PermissionCallback` (deny when absent). True runtime sink interception is
   not attempted in-process; that boundary is Stage 4 (isolated backend).
-- **Stage 3 — partial.** The ad-hoc `BLOCKED_PACKAGES` string set is replaced
-  by the analyzer's declarative restricted registry. Class-load default
-  tightening, tool-invocation gating, and cell resource budgets remain.
+- **Stage 3 — implemented (feasible parts).** Declarative restricted registry
+  (replacing `BLOCKED_PACKAGES`); command gating wired through
+  `checkCommand`; `ShellTools` now fails closed when a command is `ASK` and no
+  callback is registered; captured sandbox stdout/stderr is bounded by a 1 MiB
+  per-stream cap. Full class allow-listing (rejecting every class outside
+  `java.util`/`java.lang`) is intentionally not broadened — it would reject
+  legitimate generated types (records, `java.time`, user classes) without a
+  symbol-resolved classpath.
 - **Stage 4 — pending.** Reference isolated `SandboxExecutor` backend; required
   for untrusted code.
 - **Stage 5 — implemented (except isolation-dependent items).** Named bypass

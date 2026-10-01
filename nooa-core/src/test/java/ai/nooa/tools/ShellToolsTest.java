@@ -35,7 +35,36 @@ class ShellToolsTest {
     }
 
     @Test
-    @DisplayName("run executes shell commands")
+    @DisplayName("ASK without a callback fails closed")
+    void askWithoutCallbackDenies() {
+        var askShell = new ShellTools(workspace,
+            new Permissions().command("echo *", Permissions.Level.ASK), null);
+        try {
+            var result = askShell.run("echo hello");
+            assertThat(result.success()).isFalse();
+            assertThat(result.stderr()).contains("denied");
+        } finally {
+            askShell.close();
+        }
+    }
+
+    @Test
+    @DisplayName("ASK with an approving callback executes")
+    void askWithApprovingCallbackRuns() {
+        var askShell = new ShellTools(workspace,
+            new Permissions().command("echo *", Permissions.Level.ASK),
+            (resource, detail) -> true);
+        try {
+            var result = askShell.run("echo hello");
+            assertThat(result.success()).isTrue();
+            assertThat(result.stdout()).contains("hello");
+        } finally {
+            askShell.close();
+        }
+    }
+
+    @Test
+    @DisplayName("runExecutesCommand")
     void runExecutesCommand() {
         var result = shell.run("echo hello");
         assertThat(result.stdout()).contains("hello");

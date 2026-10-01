@@ -39,11 +39,12 @@ public final class JShellSandbox implements SandboxExecutor {
     private static final Logger log = LoggerFactory.getLogger(JShellSandbox.class);
 
     private static final long DEFAULT_TIMEOUT_MS = 30_000;
+    private static final int MAX_CAPTURE_BYTES = 1_048_576;
 
     private final Agent agent;
     private final JShell jshell;
-    private final ByteArrayOutputStream stdoutCapture = new ByteArrayOutputStream();
-    private final ByteArrayOutputStream stderrCapture = new ByteArrayOutputStream();
+    private final CappedOutputStream stdoutCapture = new CappedOutputStream(MAX_CAPTURE_BYTES);
+    private final CappedOutputStream stderrCapture = new CappedOutputStream(MAX_CAPTURE_BYTES);
     private final long timeoutMs;
     private long executionCount;
 
@@ -289,6 +290,12 @@ public final class JShellSandbox implements SandboxExecutor {
     private ExecutionResult buildResult(List<SnippetEvent> events) {
         String stdout = stdoutCapture.toString();
         String stderr = stderrCapture.toString();
+        if (stdoutCapture.truncated()) {
+            stdout += "\n... [stdout truncated at " + MAX_CAPTURE_BYTES + " bytes]";
+        }
+        if (stderrCapture.truncated()) {
+            stderr += "\n... [stderr truncated at " + MAX_CAPTURE_BYTES + " bytes]";
+        }
         stdoutCapture.reset();
         stderrCapture.reset();
 
@@ -380,6 +387,57 @@ public final class JShellSandbox implements SandboxExecutor {
             jshell.close();
         } catch (Exception e) {
             log.debug("Error closing JShell sandbox", e);
+        }
+    }
+
+    /**
+     * Output stream that stops buffering after a byte cap so a runaway cell
+     * cannot exhaust heap with captured stdout/stderr.
+     */
+    static final class CappedOutputStream extends java.io.OutputStream {
+        private final int cap;
+        private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        private boolean truncated;
+
+        CappedOutputStream(int cap) {
+            this.cap = cap;
+        }
+
+        @Override
+        public void write(int b) {
+            if (buffer.size() < cap) {
+                buffer.write(b);
+            } else {
+                truncated = true;
+            }
+        }
+
+        @Override
+        public void write(byte[] bytes, int offset, int length) {
+            int remaining = cap - buffer.size();
+            if (remaining > 0) {
+                int allowed = Math.min(length, remaining);
+                buffer.write(bytes, offset, allowed);
+                if (allowed < length) {
+                    truncated = true;
+                }
+            } else {
+                truncated = true;
+            }
+        }
+
+        void reset() {
+            buffer.reset();
+            truncated = false;
+        }
+
+        boolean truncated() {
+            return truncated;
+        }
+
+        @Override
+        public String toString() {
+            return buffer.toString();
         }
     }
 }
