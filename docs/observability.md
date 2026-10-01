@@ -40,7 +40,10 @@ export NOOA_LOG_PROMPTS_RAW=true  # disable redaction (trusted/debug only)
 
 When enabled, the runtime emits a `PromptBuilt` event containing the model name,
 full message list, tool names, output model, and sampling params. Redaction masks
-common secret patterns (API keys, tokens, bearer credentials).
+common secret patterns (API keys, tokens, bearer credentials) — including values
+whose rendered key looks sensitive (`token`, `secret`, `password`, `apiKey`), so a
+legitimately-named argument such as `token` will appear as `[REDACTED]`. For trusted
+local debugging, `NOOA_LOG_PROMPTS_RAW=true` disables redaction.
 
 Where to inspect prompts:
 

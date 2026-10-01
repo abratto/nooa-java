@@ -348,6 +348,11 @@ Evals work best when the agent already follows the NOOA patterns:
 - **Enable prompt capture when scoring context.** `ContextGrounding` needs the
   captured prompt (`NOOA_LOG_PROMPTS=true`, or a `PromptRecorder`).
 
+Worked, tested examples of these patterns live in the test suite:
+`nooa-core/.../EvalEndToEndTest` (real CodeAct tool use, blocked-cell permission
+audit, Predict retries, and prompt grounding driven by a scripted client) and
+`examples/.../RealAgentEvalTest` (evaluating the real `SentimentAgent`).
+
 ## Analyzing results
 
 A practical loop:

@@ -53,14 +53,16 @@ public final class StructuredFieldScorer implements Scorer {
         List<String> mismatched = new ArrayList<>();
         for (RecordComponent component : components) {
             try {
-                Object expectedValue = component.getAccessor().invoke(expected);
-                Object actualValue = component.getAccessor().invoke(actual);
+                var accessor = component.getAccessor();
+                accessor.setAccessible(true);
+                Object expectedValue = accessor.invoke(expected);
+                Object actualValue = accessor.invoke(actual);
                 if (Values.equal(actualValue, expectedValue)) {
                     matched++;
                 } else {
                     mismatched.add(component.getName());
                 }
-            } catch (ReflectiveOperationException e) {
+            } catch (ReflectiveOperationException | RuntimeException e) {
                 mismatched.add(component.getName());
             }
         }
