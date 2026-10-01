@@ -170,4 +170,24 @@ class EvalPhase1Test {
             agent.close();
         }
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void runRecorderCapturesPermissionDecisions() {
+        FakeLLMClient llm = new FakeLLMClient();
+        EchoAgent agent = AgentFactory.create(EchoAgent.class, llm);
+        try {
+            RunRecorder recorder = RunRecorder.attach(agent, ModelPricing.of());
+            agent.eventManager().add(new Event.PermissionDecision(
+                "file", "/etc/passwd", "DENY", "denied by policy", "new java.io.File(...)"));
+            RunTrace trace = recorder.output("x", true).trace("c1", 0);
+            var decisions = (List<Map<String, Object>>) trace.signals().get("permissionDecisions");
+            assertThat(decisions).hasSize(1);
+            assertThat(decisions.get(0))
+                .containsEntry("level", "DENY")
+                .containsEntry("detail", "/etc/passwd");
+        } finally {
+            agent.close();
+        }
+    }
 }

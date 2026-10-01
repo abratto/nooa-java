@@ -89,6 +89,7 @@ public final class RunRecorder implements AutoCloseable {
         long lastTimestamp = 0;
         String lastPromptText = null;
         java.util.List<String> toolSequence = new java.util.ArrayList<>();
+        java.util.List<java.util.Map<String, Object>> permissionDecisions = new java.util.ArrayList<>();
 
         for (Event event : events) {
             long ts = event.timestamp().toEpochMilli();
@@ -148,6 +149,12 @@ public final class RunRecorder implements AutoCloseable {
                     lastPromptText = promptText(e);
                 }
                 case Event.Retry _ -> retries++;
+                case Event.PermissionDecision decision -> permissionDecisions.add(
+                    java.util.Map.of(
+                        "resource", decision.resource(),
+                        "detail", decision.detail() == null ? "" : decision.detail(),
+                        "level", decision.level(),
+                        "reason", decision.rule() == null ? "" : decision.rule()));
                 default -> { }
             }
         }
@@ -160,6 +167,7 @@ public final class RunRecorder implements AutoCloseable {
             builder.signal("lastPrompt", lastPromptText);
         }
         builder.signal("toolEntropy", entropy(toolSequence));
+        builder.signal("permissionDecisions", java.util.List.copyOf(permissionDecisions));
 
         Double costUsd = (anyLlmComplete && pricingKnown) ? cost : null;
         return builder

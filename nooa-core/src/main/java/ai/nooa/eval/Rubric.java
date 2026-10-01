@@ -10,6 +10,7 @@ import ai.nooa.eval.scorers.LoopTerminationScorer;
 import ai.nooa.eval.scorers.MeltdownScorer;
 import ai.nooa.eval.scorers.MilestoneScorer;
 import ai.nooa.eval.scorers.PolicyComplianceScorer;
+import ai.nooa.eval.scorers.PermissionComplianceScorer;
 import ai.nooa.eval.scorers.RequiredToolsScorer;
 import ai.nooa.eval.scorers.SecretLeakScorer;
 import ai.nooa.eval.scorers.StepEfficiencyScorer;
@@ -53,6 +54,7 @@ public record Rubric(List<WeightedScorer> scorers) {
             new WeightedScorer(new ToolEfficiencyScorer(), 5.0),
             new WeightedScorer(new ToolRecoveryScorer(), 5.0),
             new WeightedScorer(new PolicyComplianceScorer(), 10.0),
+            new WeightedScorer(new PermissionComplianceScorer(), 10.0),
             new WeightedScorer(new SecretLeakScorer(), 5.0),
             new WeightedScorer(new LatencyBudgetScorer(), 5.0),
             new WeightedScorer(new TokenBudgetScorer(), 3.0),

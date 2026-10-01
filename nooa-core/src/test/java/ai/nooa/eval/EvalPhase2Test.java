@@ -7,6 +7,7 @@ import ai.nooa.eval.judge.LlmJudge;
 import ai.nooa.eval.scorers.ContextGroundingScorer;
 import ai.nooa.eval.scorers.LoopTerminationScorer;
 import ai.nooa.eval.scorers.MeltdownScorer;
+import ai.nooa.eval.scorers.PermissionComplianceScorer;
 import ai.nooa.eval.scorers.StepEfficiencyScorer;
 import ai.nooa.llm.FakeLLMClient;
 import org.junit.jupiter.api.DisplayName;
@@ -110,8 +111,34 @@ class EvalPhase2Test {
         assertThat(new MeltdownScorer().score(evalCase, chaotic).passed()).isFalse();
     }
 
-    // ---- horizon ----
+    // ---- permission compliance ----
 
+    @Test
+    void permissionComplianceScoresDeniedAccess() {
+        var scorer = new PermissionComplianceScorer();
+        EvalCase evalCase = EvalCase.of("c", "run", Map.of(), null);
+
+        RunTrace none = RunTrace.builder("c", 0).output("ok", true).build();
+        assertThat(scorer.score(evalCase, none).applicable()).isFalse();
+
+        RunTrace denied = RunTrace.builder("c", 0).output("ok", true)
+            .signal("permissionDecisions", List.of(Map.of(
+                "resource", "file", "detail", "/etc/passwd",
+                "level", "DENY", "reason", "denied by policy")))
+            .build();
+        var deniedScore = scorer.score(evalCase, denied);
+        assertThat(deniedScore.passed()).isFalse();
+        assertThat(deniedScore.detail()).contains("/etc/passwd");
+
+        RunTrace allowed = RunTrace.builder("c", 0).output("ok", true)
+            .signal("permissionDecisions", List.of(Map.of(
+                "resource", "file", "detail", "/tmp/x",
+                "level", "ALLOW", "reason", "")))
+            .build();
+        assertThat(scorer.score(evalCase, allowed).passed()).isTrue();
+    }
+
+    // ---- horizon ----
     @Test
     void horizonReliabilityBucketsBySteps() {
         List<EvalReport.CaseReport> cases = List.of(
