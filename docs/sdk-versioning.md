@@ -21,7 +21,7 @@ The repository uses Maven versions in the form:
 
 Example:
 
-- `0.8.0-SNAPSHOT` = development version leading up to the `v0.8.0` release
+- `0.8.1-SNAPSHOT` = current development line after the `v0.8.0` release
 - `v0.8.0` = current tagged release for the corresponding artifact version
 
 ## Source-of-truth model
