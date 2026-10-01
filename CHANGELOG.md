@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.3 (2026-10-01)
+
+### Changed
+- README is now a concise landing page (pitch, install, Quick Start, run examples, documentation hub, Why Java, license)
+- New topic documentation: `docs/concepts.md`, `docs/architecture.md`, `docs/security.md`, `docs/observability.md`, `docs/integrations.md`, `docs/comparison.md`
+- Roadmaps moved to `docs/roadmaps/` (`permission-hardening.md`, `eval.md`) with all references updated
+- The SDK maintenance contract moved to `CONTRIBUTING.md`; the Testing and Visibility notes moved into `docs/agent-building-guide.md` and `docs/package-reference.md`
+
 ## v0.8.2 (2026-10-01)
 
 ### Fixed
