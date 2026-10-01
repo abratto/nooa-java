@@ -33,11 +33,17 @@ limits, see [docs/package-reference.md](docs/package-reference.md).
 ## Quick Start
 
 ```java
+import ai.nooa.Agent;
+import ai.nooa.AgentFactory;
+import ai.nooa.annotations.Generate;
+import ai.nooa.annotations.SystemPrompt;
+import ai.nooa.llm.UnifiedLLM;
+
+@SystemPrompt("You are a greeting agent. Be warm and concise.")
 class GreetingAgent extends Agent {
     public GreetingAgent(UnifiedLLM llm) { super(llm); }
 
-    /** Create a warm, personalized greeting. */
-    @Generate
+    @Generate(prompt = "Write a warm, personalized greeting for the given name in one sentence.")
     public String greet(String name) {
         throw new UnsupportedOperationException("Generated at runtime");
     }
@@ -49,6 +55,11 @@ var agent = AgentFactory.create(GreetingAgent.class, llm);
 String greeting = agent.greet("Alice");
 System.out.println(greeting);
 ```
+
+The class-level `@SystemPrompt` sets the persona for every model call the agent
+makes; each `@Generate(prompt = "...")` method carries the instruction for that
+capability. The method body is never executed — `AgentFactory` instruments
+`@Generate` methods and routes calls through the configured strategy.
 
 **Requirements:** Java 25+ · Maven 3.9+
 
@@ -255,9 +266,10 @@ Java object with a clear boundary between deterministic logic and model-driven
 reasoning.
 
 - Deterministic Java code handles I/O, validation, orchestration, and state
-- `@Generate` methods define the model-powered capabilities
-- the runtime turns those method signatures into LLM tasks using the method name,
-  return type, argument values, and the current agent context
+- `@Generate` methods define the model-powered capabilities, and their
+  `prompt = "..."` is the runtime instruction
+- the method signature (name, parameters, return type) and the current agent
+  context bind the actual data and the structured-output contract
 - helper methods and fields are the agent's tools, memory, and state
 
 This design makes the framework feel like ordinary Java, but with a runtime that
@@ -276,7 +288,7 @@ class NewsAgent extends Agent {
     }
 
     // Model-powered capability: summarize the actual content given to the method
-    @Generate
+    @Generate(prompt = "Summarize the provided article in two concise sentences.")
     public String summarizeNews(String articleText) {
         throw new UnsupportedOperationException("Generated at runtime");
     }
@@ -289,10 +301,11 @@ class NewsAgent extends Agent {
 }
 ```
 
-The key idea is not that the method body is the instruction. The method contract is
-it: the name, the parameters, the return type, and the surrounding context shape the
-LLM prompt. For data-heavy tasks, include the actual input text in the prompt rather
-than relying only on a vague method docstring.
+The method body is not the instruction — the `@Generate(prompt = "...")` is. The
+method's name, parameters, and return type still matter: the arguments are bound
+into the call as typed inputs, and the return type is enforced as the structured
+output contract. For data-heavy tasks, pass the actual input text as an argument
+so the model sees the real content rather than a vague instruction.
 
 ### Use one agent for one job
 
@@ -333,7 +346,8 @@ record NewsBrief(String headline, String impact, String summary) {}
 class NewsAgent extends Agent {
     public NewsAgent(UnifiedLLM llm) { super(llm); }
 
-    @Generate @Strategy(PredictStrategy.class)
+    @Generate(prompt = "Extract the article into a brief with headline, impact, and summary fields.")
+    @Strategy(PredictStrategy.class)
     public NewsBrief extractBrief(String article) {
         throw new UnsupportedOperationException("Generated at runtime");
     }
@@ -371,7 +385,8 @@ class PeriodicNewsAgent extends Agent {
         return "Acme unveiled a battery chemistry that cuts charge time by 40%.";
     }
 
-    @Generate @Strategy(PredictStrategy.class)
+    @Generate(prompt = "Summarize the article into a brief with headline, impact, and summary fields.")
+    @Strategy(PredictStrategy.class)
     public NewsBrief summarize(String article) {
         throw new UnsupportedOperationException("Generated at runtime");
     }
@@ -433,22 +448,22 @@ class SupportWorkflowAgent extends Agent {
     void markEscalated() { state = WorkflowState.ESCALATED; }
 
     // --- model-powered steps ---
-    @Generate
+    @Generate(prompt = "Validate the request. Reply 'ok' or 'needs_review' plus a one-line reason.")
     public String validateCase(String request) {
         throw new UnsupportedOperationException();
     }
 
-    @Generate
+    @Generate(prompt = "Investigate the request and list the relevant findings.")
     public String investigateIssue(String request) {
         throw new UnsupportedOperationException();
     }
 
-    @Generate
+    @Generate(prompt = "Create a short, concrete action plan from the issue summary.")
     public String createPlan(String issueSummary) {
         throw new UnsupportedOperationException();
     }
 
-    @Generate
+    @Generate(prompt = "Execute the plan and describe the outcome in one or two sentences.")
     public String executeAction(String plan) {
         throw new UnsupportedOperationException();
     }
@@ -576,12 +591,13 @@ class LegalIntakeAgent extends Agent {
     }
 
     // ---- Generation methods (LLM completes these) ----
-    @Generate @Strategy(PredictStrategy.class)
+    @Generate(prompt = "Classify the matter and return its topic, urgency, and a one-sentence summary.")
+    @Strategy(PredictStrategy.class)
     public Classification classify(String message) {
         throw new UnsupportedOperationException();
     }
 
-    @Generate
+    @Generate(prompt = "Draft a helpful, non-advisory response using the request and its classification.")
     public String respond(String message, Classification classification) {
         throw new UnsupportedOperationException();
     }
@@ -613,11 +629,12 @@ Two strategies cover 95% of use cases:
 
 ```java
 // Default: CodeActStrategy — REPL loop with executeJava + returnResult tools
-@Generate
+@Generate(prompt = "Solve the arithmetic problem and return the numeric answer.")
 public String calculate(String problem) { ... }
 
 // Explicit: PredictStrategy — single LLM call, validates against Record schema
-@Generate @Strategy(PredictStrategy.class)
+@Generate(prompt = "Classify the sentiment of the text and return sentiment and confidence.")
+@Strategy(PredictStrategy.class)
 public SentimentResult classify(String text) { ... }
 
 record SentimentResult(String sentiment, double confidence) {}
@@ -690,15 +707,15 @@ var pastErrors = __events__.findByType("ErrorEvent");
 
 ### 5. Prompt Grounding and Argument-Aware Tasks
 
-A generated method is mostly a contract, not a body. The runtime turns that
-contract into a prompt using the method name, the return type, the current
-context, and the user-supplied input.
+A generated method is a contract plus an instruction: the `@Generate(prompt = "...")`
+supplies the instruction, while the method name, parameters, return type, and agent
+context supply the data and the structured-output contract.
 
 For content-heavy tasks, the actual argument values matter. A method like
-`summarizeNews(String articleText)` without the article text in the prompt is much
-weaker than a prompt that includes the article text or a structured summary of it.
-This is why the framework should prefer grounded prompts over docstring-only
-instructions whenever the real input is the task.
+`summarizeNews(String articleText)` is much stronger when its prompt is explicit
+about the task and the argument carries the real article text than when it relies on
+a generic instruction. Prefer grounded, specific prompts and pass the real input as
+an argument.
 
 In practice:
 
@@ -837,14 +854,15 @@ class ResearchAgent extends Agent {
     }
 
     // Phase 1: gather information (CodeActStrategy — default)
-    @Generate
+    @Generate(prompt = "Gather a list of key facts about the topic using the available helper methods.")
     public List<String> gatherFacts(String topic) {
         // LLM calls searchWeb(), analyzes results, returns facts
         throw new UnsupportedOperationException();
     }
 
     // Phase 2: write structured report (PredictStrategy)
-    @Generate @Strategy(PredictStrategy.class)
+    @Generate(prompt = "Write a structured report from the topic and the gathered facts.")
+    @Strategy(PredictStrategy.class)
     public Report writeReport(String topic, List<String> facts) {
         // LLM receives facts as context, produces structured Report
         throw new UnsupportedOperationException();
