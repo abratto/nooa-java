@@ -41,6 +41,11 @@ public final class PredictStrategy implements GenerationStrategy {
             } catch (Exception e) {
                 lastError = e;
                 retryFeedback = retryDiagnostic(e, call.genericReturnType());
+                if (attempts < config.maxRetries()) {
+                    runtime.eventManager().add(new ai.nooa.context.Event.Retry(
+                        call.method().getName(), attempts, "structured-output",
+                        e.getClass().getSimpleName()));
+                }
             }
         }
         throw new GenerationError("PredictStrategy failed after " + config.maxRetries() + " attempts", lastError);

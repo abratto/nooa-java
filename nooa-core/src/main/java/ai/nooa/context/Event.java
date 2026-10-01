@@ -13,7 +13,7 @@ public sealed interface Event
            Event.BeforeAgentCall, Event.AfterAgentCall,
            Event.LLMCallStart, Event.LLMCallEnd,
            Event.Feedback, Event.Summary, Event.LLMComplete,
-           Event.PromptBuilt {
+           Event.PromptBuilt, Event.Retry {
 
     UUID id();
     Instant timestamp();
@@ -37,6 +37,7 @@ public sealed interface Event
             case Summary _ -> "assistant";
             case LLMComplete _ -> "system";
             case PromptBuilt _ -> "system";
+            case Retry _ -> "system";
         };
     }
 
@@ -163,6 +164,14 @@ public sealed interface Event
                 outputModel,
                 samplingParams != null ? java.util.Map.copyOf(samplingParams) : java.util.Map.of(),
                 redacted);
+        }
+    }
+
+    /** Emitted when a strategy or validation condition retries a generation attempt. */
+    record Retry(UUID id, Instant timestamp, String methodName, int attempt,
+                 String reason, String exceptionType) implements Event {
+        public Retry(String methodName, int attempt, String reason, String exceptionType) {
+            this(UUID.randomUUID(), Instant.now(), methodName, attempt, reason, exceptionType);
         }
     }
 }

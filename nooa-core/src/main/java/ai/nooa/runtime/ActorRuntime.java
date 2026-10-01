@@ -346,6 +346,8 @@ public final class ActorRuntime implements RuntimeServices, AutoCloseable {
                 if (attempts >= 3) {
                     throw error;
                 }
+                agent.eventManager().add(new Event.Retry(
+                    call.method().getName(), attempts, "postcondition", "InvariantError"));
                 agent.eventManager().add(new Event.Feedback(
                     "Previous result failed validation: " + error.getMessage()
                         + "\nPlease generate a corrected result."));
