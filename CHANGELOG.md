@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.8.4 (2026-10-01)
+
+### Added
+- End-to-end evaluation coverage against real agents: `EvalEndToEndTest` exercises CodeAct tool use, a blocked cell producing a real `Event.PermissionDecision`, Predict retries, and prompt grounding; `RealAgentEvalTest` evaluates the real `SentimentAgent` through `EvalRunner`
+
+### Fixed
+- `StructuredFieldScorer` now reads record component accessors with `setAccessible`, so outputs from package-private record types score correctly (surfaced by the real-agent eval)
+
+### Changed
+- Documented prompt-capture redaction of sensitive-looking argument keys (`token`, `secret`, `password`, `apiKey`) and linked the worked eval examples from `docs/eval-guide.md`
+
 ## v0.8.3 (2026-10-01)
 
 ### Changed
