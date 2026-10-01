@@ -108,4 +108,4 @@ This keeps the SDK predictable for integration teams while preserving a clear bo
 
 ## Sandbox permission guarantees
 
-The in-process sandbox applies a static permission gate (AST-based `CodePermissionAnalyzer`) plus resolved-path file checks and deny-by-default `Permissions` rules. This is a strong static/allow-list control for trusted or reviewed code, not a hostile-code isolation boundary. Executing untrusted model output additionally requires an isolated `SandboxExecutor` backend or an equivalent external sandbox; see `docs/roadmap.md` for the staged hardening plan and guarantee levels.
+The in-process sandbox applies a static permission gate (AST-based `CodePermissionAnalyzer`) plus resolved-path file checks and deny-by-default `Permissions` rules. This is a strong static/allow-list control for trusted or reviewed code, not a hostile-code isolation boundary. Executing untrusted model output additionally requires an isolated `SandboxExecutor` backend or an equivalent external sandbox; see `docs/roadmaps/permission-hardening.md` for the staged hardening plan and guarantee levels.

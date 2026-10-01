@@ -7,7 +7,7 @@ built rather than a re-implementation.
 
 This guide covers what is included, what each piece measures, how to define
 datasets, how to run evals, and how to analyze the results. For the staged
-design history and roadmap status, see [eval-roadmap.md](eval-roadmap.md).
+design history and roadmap status, see [roadmaps/eval.md](roadmaps/eval.md).
 
 ## Contents
 
@@ -374,4 +374,4 @@ A practical loop:
 - `LlmJudge` is nondeterministic and biased; treat it as an instrument, not a
   gate, until calibrated.
 - The sandbox permission gate is a strong static/allow-list control, not a
-  hostile-code isolation boundary; see [roadmap.md](roadmap.md) Stage 4.
+  hostile-code isolation boundary; see [roadmaps/permission-hardening.md](roadmaps/permission-hardening.md) Stage 4.

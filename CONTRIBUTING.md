@@ -62,6 +62,20 @@ git push origin main vX.Y.Z
 Version policy, compatibility rules, and the snapshot model live in
 [docs/sdk-versioning.md](docs/sdk-versioning.md).
 
+## SDK maintenance and repository layout
+
+This repository is the **canonical source for the Java SDK**. It is built here and
+shipped as Maven artifacts (`ai.nooa:nooa-core`), so framework API evolution,
+runtime behavior, compatibility, and core library maintenance all happen here.
+
+- `nooa-core` — the reusable, framework-agnostic agent SDK.
+- `examples` — runnable demos and the example catalog.
+
+The CLAD methodology and the realized CLAD agent live in separate repositories.
+Keep the generic SDK here, keep CLAD-specific policy and behavior out of it, and
+treat this repo as the maintenance home for the framework source, even when
+downstream implementations live elsewhere.
+
 ## Code Style
 
 - Java 25 idioms: records, sealed interfaces, pattern matching, virtual threads

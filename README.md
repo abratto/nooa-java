@@ -2,33 +2,39 @@
 
 **An independent Java port of [NVIDIA's Object-Oriented Agents (NOOA)](https://github.com/nvidia-nemo/labs-OO-Agents) framework.**
 
-The original Python framework by NVIDIA Labs ([research paper](https://arxiv.org/abs/2607.20709),
-[tech blog](https://developer.nvidia.com/blog/six-agent-harness-capabilities-for-higher-model-performance/))
-introduced the agent-as-a-single-class model. This project ports that design to Java 25+,
-adapting Python idioms to the JVM ecosystem while preserving the six core design ideas:
-typed I/O, pass-by-reference, code-as-action, programmable loops, object state,
-and model-callable harness APIs.
+An agent is a single Java class. Methods are capabilities, fields are state, and
+annotations are metadata. The SDK handles LLM generation, code execution, and
+structured output enforcement, preserving the six core design ideas of the
+original framework:
 
-An agent is a single Java class. Methods are capabilities, fields are state,
-annotations are metadata. The SDK handles LLM generation, code execution,
-and structured output enforcement.
+- **Typed I/O** — records are enforced return-type contracts
+- **Pass by reference** — live objects in JShell, not serialized text
+- **Code as action** — the model writes Java, executed in a sandbox
+- **Programmable loops** — pluggable `GenerationStrategy` implementations
+- **Object state** — instance fields on the agent
+- **Model-callable harness APIs** — `context()`, `events()`, and helpers from generated code
 
-## SDK maintenance contract
+## Requirements
 
-This repository is the canonical source for the Java SDK itself. The SDK is built
-from the modules in this repo and shipped as Maven artifacts. In other words,
-this is the place where framework API evolution, runtime behavior, compatibility,
-and core library maintenance happen.
+Java 25+ · Maven 3.9+
 
-For the formal SDK release and compatibility policy, see [docs/sdk-versioning.md](docs/sdk-versioning.md).
-For the staged plan to harden CodeAct permission checks, see [docs/roadmap.md](docs/roadmap.md).
-For how to evaluate agents (`ai.nooa.eval`) — datasets, scorers, reliability metrics, reports — see [docs/eval-guide.md](docs/eval-guide.md); for its design history, [docs/eval-roadmap.md](docs/eval-roadmap.md).
-For guidance on choosing runtime shapes and using sessions, skills, middleware, and
-typed failures, see [docs/agent-building-guide.md](docs/agent-building-guide.md).
-For a concrete explanation of prompt assembly and prompt design, see
-[docs/prompt-engineering.md](docs/prompt-engineering.md).
-For the `nooa-core` package map, strategy/configuration guidance, and current audit
-limits, see [docs/package-reference.md](docs/package-reference.md).
+## Install
+
+```xml
+<dependency>
+  <groupId>ai.nooa</groupId>
+  <artifactId>nooa-core</artifactId>
+  <version>0.8.2</version>
+</dependency>
+```
+
+For production use, pin to the released version (`0.8.2`); active development on
+`main` uses the `0.8.3-SNAPSHOT` version. To build locally and install into your
+local Maven repository:
+
+```bash
+mvn install
+```
 
 ## Quick Start
 
@@ -52,869 +58,57 @@ class GreetingAgent extends Agent {
 var llm = UnifiedLLM.create(
     UnifiedLLM.openAI(System.getenv("OPENAI_API_KEY"), "gpt-4o").build());
 var agent = AgentFactory.create(GreetingAgent.class, llm);
-String greeting = agent.greet("Alice");
-System.out.println(greeting);
+System.out.println(agent.greet("Alice"));
 ```
 
-The class-level `@SystemPrompt` sets the persona for every model call the agent
-makes; each `@Generate(prompt = "...")` method carries the instruction for that
-capability. The method body is never executed — `AgentFactory` instruments
-`@Generate` methods and routes calls through the configured strategy.
+The class-level `@SystemPrompt` sets the persona for every model call; each
+`@Generate(prompt = "...")` method carries the instruction for that capability.
+The method body is never executed — `AgentFactory` instruments `@Generate`
+methods and routes calls through the configured strategy.
 
-**Requirements:** Java 25+ · Maven 3.9+
-
-To run the examples against a model, the easiest way is the bundled runner:
+## Run the examples
 
 ```bash
-./examples/run.sh --list                  # see what can run
-./examples/run.sh QuickstartExamples      # run one example
-./examples/run.sh --all                   # run everything, print a pass/fail summary
+./examples/run.sh --all        # run every example, print a pass/fail summary
+./examples/run.sh --list       # list runnable examples
 ```
 
-For the full example catalog, model configuration (local Ollama by default,
-`qwen3.8:27b-mlx`), and per-example reasoning-effort notes, see
-[examples/README.md](examples/README.md).
-
-```xml
-<dependency>
-  <groupId>ai.nooa</groupId>
-  <artifactId>nooa-core</artifactId>
-    <version>0.8.2</version>
-</dependency>
-```
-
-### Using the SDK in another Java project
-
-The SDK is intended to be consumed like any other Maven library artifact. The
-source of truth is this repository, and the published library coordinates are the
-core artifact from this build. For production use, pin to the released version
-(`0.8.2`); active development on `main` uses the `0.8.3-SNAPSHOT` version:
-
-```xml
-<dependency>
-  <groupId>ai.nooa</groupId>
-  <artifactId>nooa-core</artifactId>
-    <version>0.8.2</version>
-</dependency>
-```
-
-For local development, install the project into your local Maven repository:
-
-```bash
-mvn install
-```
-
-For shared usage, publish the artifact to your organization’s Maven repository,
-GitHub Packages, Maven Central, or an internal repository manager, then depend on
-that released version in downstream projects.
-
-The repository therefore serves a dual role:
-
-- it is the source for the framework implementation
-- it is the maintenance home for the SDK artifact versioning and compatibility
-
-## Architecture
-
-## Prompt inspection hook
-
-NOOA can now emit the exact outbound prompt bundle before each LLM call so you can inspect and tune prompts.
-
-Enable prompt capture:
-
-```bash
-export NOOA_LOG_PROMPTS=true
-```
-
-Optional raw mode (default is redacted):
-
-```bash
-export NOOA_LOG_PROMPTS_RAW=true
-```
-
-Behavior:
-
-- When enabled, runtime emits a PromptBuilt event containing model name, full message list, tool names, output model, and sampling params.
-- By default PromptBuilt content is redacted for common secret patterns (api keys, tokens, bearer credentials).
-- Raw mode disables redaction and should only be used in trusted local/debug environments.
-
-Where to inspect:
-
-- In-process: subscribe to agent.eventManager().onEvent(...) and filter PromptBuilt events.
-- JSONL recorder: attach a PromptRecorder to stream PromptBuilt events to a file for tuning runs.
-- Snapshot path: PromptBuilt is included in AgentSnapshot save/load.
-- ATIF path: PromptBuilt is exported by AtifExporter for trajectory analysis.
-
-Stream prompts to a JSONL file (one event per line) for offline tuning analysis:
-
-```java
-var recorder = PromptRecorder.attach(agent, Path.of("prompts.jsonl"));
-// ... agent work happens ...
-recorder.close(); // writes are appended eagerly, so partial runs remain inspectable
-```
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Agent as Agent<br/>(Your Class)
-    participant AF as AgentFactory<br/>(ByteBuddy)
-    participant AR as ActorRuntime
-    participant S as Strategy<br/>(CodeAct/Predict)
-    participant EM as EventManager
-    participant CM as ContextManager
-    participant LLM as UnifiedLLM<br/>(API Call)
-    participant JS as JShellSandbox
-
-    rect rgb(240, 248, 255)
-        note right of User: 1. Create the agent
-        User->>AF: AgentFactory.create(MyAgent.class, llm)
-        AF->>AF: Scan @Generate methods
-        AF->>AF: ByteBuddy subclass + interceptor
-        AF-->>User: instrumented agent instance
-    end
-
-    rect rgb(255, 248, 240)
-        note right of User: 2. Call a @Generate method
-        User->>Agent: agent.analyze("input")
-        Agent->>AF: interceptor fires
-        AF->>AR: callPlan(strategy, call)
-        AR->>EM: add BeforeAgentCall
-        AR->>EM: add Task("input")
-    end
-
-    rect rgb(240, 255, 240)
-        note right of User: 3. Strategy loop
-        loop Until done or max iterations
-            AR->>CM: render context blocks
-            AR->>EM: toMessages()
-            AR->>LLM: chat(messages, tools, outputSchema)
-            LLM-->>AR: LLMResponse
-
-            alt tool call: executeJava
-                AR->>JS: execute(code)
-                JS-->>AR: ExecutionResult(stdout, stderr)
-                AR->>EM: add ExecutionOutput
-            else tool call: returnResult
-                AR-->>Agent: result value
-            else structured output (Predict)
-                S->>S: validate against Record
-                AR-->>Agent: typed result
-            else text-only
-                AR->>EM: add LLMOutput
-            end
-        end
-    end
-
-    rect rgb(255, 240, 255)
-        note right of User: 4. Return
-        AR->>EM: add AfterAgentCall
-        AR-->>User: result
-    end
-```
-
-### Component Map
-
-```
-┌──────────────────────────────────────────────────────────┐
-│                    Your Agent Class                        │
-│  ┌──────────┐  ┌──────────┐  ┌────────────────────────┐  │
-│  │ @Generate │  │ @Generate│  │ public String helper() │  │
-│  │ String    │  │ @Strategy│  │ { return "done"; }     │  │
-│  │ analyze() │  │ classify │  │                        │  │
-│  └────┬─────┘  └────┬─────┘  └───────────┬────────────┘  │
-│       │              │                    │               │
-│  ┌────┴──────────────┴────────────────────┴───────────┐  │
-│  │              AgentFactory (ByteBuddy)               │  │
-│  │  Intercepts @Generate → routes to ActorRuntime     │  │
-│  └──────────────────────┬─────────────────────────────┘  │
-└─────────────────────────┼────────────────────────────────┘
-                          │
-┌─────────────────────────┼────────────────────────────────┐
-│                 ActorRuntime                              │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐ │
-│  │generate()│  │execute() │  │callPlan()│  │ stats()  │ │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └──────────┘ │
-└───────┼─────────────┼─────────────┼──────────────────────┘
-        │             │             │
-  ┌─────┴─────┐ ┌─────┴──────┐ ┌──┴────────────┐
-  │ UnifiedLLM │ │JShellSandbox│ │Strategy        │
-  │ (HTTP)     │ │ (JDK built- │ │ CodeAct        │
-  │ OpenAI     │ │  in JShell) │ │ Predict        │
-  │ Anthropic  │ │ Timeout     │ │ Reflexion      │
-  │ OpenRouter │ │ Permissions │ └───────────────┘
-  │ DeepInfra  │ └────────────┘
-  │ Groq       │
-  │ Ollama     │
-  └────────────┘
-
-┌──────────────────────────────────────────────────────────┐
-│                 Supporting Services                       │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐ │
-│  │ Context  │  │  Event   │  │  Memory  │  │ Tracing  │ │
-│  │ Manager  │  │ Manager  │  │  (SQLite)│  │ (OTel)   │ │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘ │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐ │
-│  │  Shell   │  │   MCP    │  │   Todo   │  │Snapshot  │ │
-│  │  Tools   │  │ Manager  │  │ Manager  │  │Save/Rest │ │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘ │
-└──────────────────────────────────────────────────────────┘
-```
-
-## Developer mental model: how to think about NOOA
-
-The easiest way to reason about this framework is to treat an agent as a small
-Java object with a clear boundary between deterministic logic and model-driven
-reasoning.
-
-- Deterministic Java code handles I/O, validation, orchestration, and state
-- `@Generate` methods define the model-powered capabilities, and their
-  `prompt = "..."` is the runtime instruction
-- the method signature (name, parameters, return type) and the current agent
-  context bind the actual data and the structured-output contract
-- helper methods and fields are the agent's tools, memory, and state
-
-This design makes the framework feel like ordinary Java, but with a runtime that
-wraps each generated method in a disciplined prompt-and-tool loop.
-
-### A practical pattern
-
-```java
-@SystemPrompt("You are a news summarizer.")
-class NewsAgent extends Agent {
-    public NewsAgent(UnifiedLLM llm) { super(llm); }
-
-    // Deterministic Java: fetch and normalize inputs
-    String fetchLatestHeadline() {
-        return "Acme launches a battery chemistry that cuts charge time by 40%";
-    }
-
-    // Model-powered capability: summarize the actual content given to the method
-    @Generate(prompt = "Summarize the provided article in two concise sentences.")
-    public String summarizeNews(String articleText) {
-        throw new UnsupportedOperationException("Generated at runtime");
-    }
-
-    // Pure Java orchestrator: gather data, then delegate to the model
-    public String summarizeCurrentNews() {
-        var article = fetchLatestHeadline();
-        return summarizeNews(article);
-    }
-}
-```
-
-The method body is not the instruction — the `@Generate(prompt = "...")` is. The
-method's name, parameters, and return type still matter: the arguments are bound
-into the call as typed inputs, and the return type is enforced as the structured
-output contract. For data-heavy tasks, pass the actual input text as an argument
-so the model sees the real content rather than a vague instruction.
-
-### Use one agent for one job
-
-Keep an agent focused on a single business capability:
-
-- summarize articles
-- classify tickets
-- extract fields from a document
-- plan the next action
-- answer from a known domain model
-
-Avoid building one giant agent that tries to do everything. Split the work into
-small capabilities and orchestrate them in Java.
-
-### A good organizational split
-
-| Concern | Place it here |
-|---|---|
-| HTTP calls, file access, DB logic, validation | regular Java methods |
-| classification, summarization, extraction, planning | `@Generate` methods |
-| branching and sequencing | Java orchestrator methods |
-| persistent memory and shared state | agent fields, context blocks, `MemoryStore` |
-| model/tool instructions | `@SystemPrompt`, `@Generate(prompt = "...")`, method naming, strategy selection |
-
-This keeps the LLM focused on the tasks it is good at while leaving the rest to
-Java.
-
-### Structured output, without hard-coding a provider
-
-A common pattern in agent systems is to ask the model for JSON and then parse it
-into a Java record. NOOA supports that directly through the provider layer, so the
-same logic works with OpenAI-compatible endpoints, local Ollama, and other
-backends behind the same abstraction.
-
-```java
-record NewsBrief(String headline, String impact, String summary) {}
-
-class NewsAgent extends Agent {
-    public NewsAgent(UnifiedLLM llm) { super(llm); }
-
-    @Generate(prompt = "Extract the article into a brief with headline, impact, and summary fields.")
-    @Strategy(PredictStrategy.class)
-    public NewsBrief extractBrief(String article) {
-        throw new UnsupportedOperationException("Generated at runtime");
-    }
-}
-```
-
-The framework makes this easy because the model call is mediated by `UnifiedLLM`,
-while your Java type becomes the contract. If a model returns invalid or partial
-JSON, you can validate it in Java and retry with a stricter prompt instead of
-accepting bad output silently.
-
-```java
-var helper = new StructuredOutputHelper(3);
-var brief = helper.extract(
-    List.of(Message.user("Summarize the article and return JSON.")),
-    NewsBrief.class,
-    llm,
-    Map.of("temperature", 0.2)
-);
-```
-
-This keeps the pattern provider-agnostic: the agent code does not know whether the
-underlying model is local or remote.
-
-### Simple example: a periodic news agent
-
-A basic pattern is: Java fetches or prepares the input, the model turns it into a
-structured result, and the agent loops on a schedule.
-
-```java
-class PeriodicNewsAgent extends Agent {
-    public PeriodicNewsAgent(UnifiedLLM llm) { super(llm); }
-
-    String fetchLatestNews() {
-        return "Acme unveiled a battery chemistry that cuts charge time by 40%.";
-    }
-
-    @Generate(prompt = "Summarize the article into a brief with headline, impact, and summary fields.")
-    @Strategy(PredictStrategy.class)
-    public NewsBrief summarize(String article) {
-        throw new UnsupportedOperationException("Generated at runtime");
-    }
-
-    public void pollOnce() {
-        var article = fetchLatestNews();
-        var brief = summarize(article);
-        System.out.println(brief.summary());
-    }
-}
-```
-
-This is the same mental model used throughout NOOA:
-
-- Java owns the orchestration and state
-- helper methods provide deterministic facts and tools
-- `@Generate` methods perform the model-powered reasoning step
-- strategies decide how that result is produced and validated
-
-## Example: business workflow as a state machine
-
-Many agent systems are described as graphs or state machines, and that mental model
-still applies here — but in NOOA the state machine is usually expressed in Java,
-not in a separate workflow DSL.
-
-The agent still has a lifecycle, but the lifecycle is the agent object itself:
-
-```mermaid
-stateDiagram-v2
-    [*] --> Intake
-    Intake --> ValidateCase
-    ValidateCase --> NeedsReview: missing info or policy check
-    ValidateCase --> RouteToOperator: ready to proceed
-    RouteToOperator --> Investigate
-    Investigate --> DraftPlan
-    DraftPlan --> ExecuteAction
-    ExecuteAction --> ReviewOutcome
-    ReviewOutcome --> [*]: resolved
-    ReviewOutcome --> Investigate: needs another pass
-    Investigate --> Escalate: risk or blocker
-    Escalate --> [*]
-```
-
-A realistic implementation usually looks like this:
-
-```java
-enum WorkflowState { INTAKE, VALIDATE, ROUTE, INVESTIGATE, PLAN, EXECUTE, REVIEW, ESCALATED }
-
-@SystemPrompt("You are a support and operations agent for customer requests.")
-class SupportWorkflowAgent extends Agent {
-    private WorkflowState state = WorkflowState.INTAKE;
-    private final List<String> notes = new ArrayList<>();
-
-    public SupportWorkflowAgent(UnifiedLLM llm) { super(llm); }
-
-    // --- Deterministic Java transitions ---
-    void markValidated() { state = WorkflowState.ROUTE; }
-    void markNeedsReview() { state = WorkflowState.INVESTIGATE; }
-    void markEscalated() { state = WorkflowState.ESCALATED; }
-
-    // --- model-powered steps ---
-    @Generate(prompt = "Validate the request. Reply 'ok' or 'needs_review' plus a one-line reason.")
-    public String validateCase(String request) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Generate(prompt = "Investigate the request and list the relevant findings.")
-    public String investigateIssue(String request) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Generate(prompt = "Create a short, concrete action plan from the issue summary.")
-    public String createPlan(String issueSummary) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Generate(prompt = "Execute the plan and describe the outcome in one or two sentences.")
-    public String executeAction(String plan) {
-        throw new UnsupportedOperationException();
-    }
-
-    // --- orchestrator: this is the workflow ---
-    public String handleRequest(String request) {
-        state = WorkflowState.INTAKE;
-        notes.add(request);
-
-        var validation = validateCase(request);
-        if (validation.contains("needs_review")) {
-            state = WorkflowState.INVESTIGATE;
-            var findings = investigateIssue(request);
-            var plan = createPlan(findings);
-            state = WorkflowState.PLAN;
-            return executeAction(plan);
-        }
-
-        state = WorkflowState.ROUTE;
-        return validation;
-    }
-}
-```
-
-This is the important point: the agent is participating in a workflow, but the
-workflow is not a separate engine. It is the agent's Java control flow plus the
-runtime-provided LLM capabilities.
-
-A workflow can still be looped, escalated, and revisited. For example:
-
-- validate -> loop back to investigate if information is missing
-- plan -> execute -> review -> loop if the result is incomplete
-- escalate when the agent hits a blocker or risk threshold
-
-That makes the workflow feel very much like a state machine, even though the
-implementation lives in a normal Java object instead of a graph DSL.
-
-## How this compares to other agent frameworks
-
-The most important difference is not whether the framework is "agentic"; it is
-what the primary abstraction is.
-
-### LangGraph: graph-first orchestration
-
-LangGraph treats the workflow as the main artifact. The program is expressed as
-nodes, edges, conditions, and state transitions.
-
-This is excellent when the business process itself needs to be inspected,
-debugged, or modified as a graph. It is a natural fit for explicit workflows,
-loops, and human-in-the-loop handoffs.
-
-The cost is that the mental model is graph-heavy: you often design workflow
-structure before designing the domain object that owns the task.
-
-### Role-based systems: agent-first collaboration
-
-Frameworks built around roles, teams, and message passing treat agents as
-participants in a collaborative process. A manager agent may delegate to worker
-agents, which then pass outcomes back through conversation or tool calls.
-
-This is useful when the system is inherently social: multiple specialists, debate,
-planning, delegation, or trial-and-error coordination.
-
-The tradeoff is that the orchestration often sits above the business object. The
-agent becomes a participant in a larger coordination layer rather than a native
-part of the application domain model.
-
-### NOOA: object-first orchestration
-
-NOOA is different. The primary abstraction is still a Java object:
-
-- state lives in fields
-- helpers are regular Java methods
-- `@Generate` methods are model-powered capabilities
-- orchestration is plain Java control flow
-- the runtime handles prompt generation, tool execution, and result validation
-
-That means the workflow can be modeled as a method-driven state machine without
-introducing a separate graph or workflow DSL. The business process is represented
-in the class itself, in idiomatic Java.
-
-| Framework | Primary abstraction | Orchestration style | Best fit |
-|---|---|---|---|
-| LangGraph | graph | explicit node/edge transitions | workflow-heavy systems with visible branching |
-| Role-based agent systems | specialized agents | delegation and collaboration | multi-agent task decomposition |
-| NOOA | Java object | method calls + runtime strategy loop | domain objects that need agent capabilities |
-
-### Why NOOA feels simpler in Java
-
-For Java developers, this is often the most natural shape:
-
-- keep the business logic in normal Java classes
-- express the workflow as method sequencing and state transitions
-- reserve the LLM for the capability step, not the entire orchestration layer
-
-Instead of rewriting the app around a graph engine, you put the agent where it
-belongs: as a stateful Java object participating in your application logic.
-
-This is especially valuable when the agent is embedded inside an operational
-workflow, a service, or a domain object that already has real state and business
-rules.
-
-## Core Concepts
-
-### 1. An Agent Is a Java Class
-
-Every agent extends `Agent`. Every method has a role:
-
-| Method type | How to write it | What happens |
-|---|---|---|
-| **Generation** | `@Generate(prompt = "...")` | Body replaced at runtime by the configured strategy |
-| **Deterministic helper** | Public method with a normal body | Runs as regular Java and is exposed in `AgentDoc` |
-| **Orchestrator** | Normal method body, calls other methods | Pure Java workflow — classify → route → act |
-
-```java
-@SystemPrompt("You are a legal intake specialist.")
-class LegalIntakeAgent extends Agent {
-
-    public LegalIntakeAgent(UnifiedLLM llm) { super(llm); }
-
-    // ---- Deterministic helpers (the LLM can call these) ----
-    boolean isEmergency(String message) {
-        return message.toLowerCase().contains("urgent")
-            || message.toLowerCase().contains("dying");
-    }
-
-    // ---- Generation methods (LLM completes these) ----
-    @Generate(prompt = "Classify the matter and return its topic, urgency, and a one-sentence summary.")
-    @Strategy(PredictStrategy.class)
-    public Classification classify(String message) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Generate(prompt = "Draft a helpful, non-advisory response using the request and its classification.")
-    public String respond(String message, Classification classification) {
-        throw new UnsupportedOperationException();
-    }
-
-    // ---- Orchestrator (pure Java — no LLM calls itself) ----
-    public String handle(String message) {
-        var classification = classify(message);
-        if (classification.urgency() == Priority.EMERGENCY) {
-            context().put("priority", "EMERGENCY — respond in under 30 seconds");
-        }
-        return respond(message, classification);
-    }
-}
-
-enum Priority { LOW, MEDIUM, HIGH, EMERGENCY }
-record Classification(String topic, Priority urgency, String summary) {}
-```
-
-Key design rule: **one method = one LLM task**. Don't make a method do classification AND implementation. Split into classify → route → act. Orchestrators are pure Java.
-
-### 2. Strategies Control How the LLM Completes a Method
-
-Two strategies cover 95% of use cases:
-
-| Strategy | Use when | Returns |
-|---|---|---|
-| `CodeActStrategy` (default) | The LLM needs to run code, call helpers, iterate | Any type — result of code execution |
-| `PredictStrategy` | Classification, extraction, single-pass tasks | A Java Record (structured output) |
-
-```java
-// Default: CodeActStrategy — REPL loop with executeJava + returnResult tools
-@Generate(prompt = "Solve the arithmetic problem and return the numeric answer.")
-public String calculate(String problem) { ... }
-
-// Explicit: PredictStrategy — single LLM call, validates against Record schema
-@Generate(prompt = "Classify the sentiment of the text and return sentiment and confidence.")
-@Strategy(PredictStrategy.class)
-public SentimentResult classify(String text) { ... }
-
-record SentimentResult(String sentiment, double confidence) {}
-```
-
-### 3. Visibility: Control the Agent API Documentation
-
-`AgentDoc` describes the API that the runtime exposes to generated code. Public
-methods and declared instance fields are included by default; framework methods,
-static fields, private-like methods, and explicitly hidden members are excluded.
-Use `@Hidden` to exclude a public method or instance field:
-
-```java
-@Hidden private String cachedIndex = "...";  // field
-@Hidden public void rebuildIndex() { ... }    // method
-```
-
-`@Hidden` affects generated API documentation and context state rendering. It does
-not change Java access control, erase a value from memory, or provide a security
-boundary for code execution. Use permissions and an external sandbox for those
-concerns.
-
-### 3a. Sandbox Permission Gate
-
-Generated CodeAct cells pass through a static permission gate before execution.
-`CodePermissionAnalyzer` parses each cell and resolves restricted API usage by
-AST node (imports, qualified types, object creations, reflection and sink calls,
-string literals) rather than substring matching, then decides ALLOW / ASK / DENY
-against the agent's `Permissions`:
-
-- restricted file, URL, command, and class-load APIs are denied unless an
-  explicit rule allows them;
-- wildcard imports of restricted packages, `Class.forName` built from pieces,
-  reflective methods, and non-literal arguments to sensitive sinks are caught;
-- dynamic resources route to the agent's `PermissionCallback` and are denied
-  when no callback is registered;
-- file checks resolve symlinks, so a link inside an allowed root cannot escape
-  it; every restricted resource in a cell must be allowed (fail closed);
-- each decision is emitted as a structured `Event.PermissionDecision` for audit
-  and exported through ATIF and snapshots.
-
-Guarantee level: this gate is a strong static/allow-list control for trusted or
-reviewed code, not a hostile-code isolation boundary. Applications executing
-untrusted model output must also use an isolated `SandboxExecutor` backend (or
-an equivalent external sandbox). See [docs/roadmap.md](docs/roadmap.md) for the
-staged hardening plan and the isolation stage.
-
-### 4. Context Blocks and Events
-
-Context blocks are key-value pairs rendered into the system prompt before each LLM call. Events are the conversation history.
-
-```java
-// Static block — set once, stays forever
-context().put("focus", "security analysis");
-
-// Dynamic block — re-evaluated every LLM turn
-context().putDynamic("project_status", "self.formatProjectStatus()");
-
-// Remove a block
-context().remove("focus");
-```
-
-The LLM can access these from generated code too:
-
-```java
-// In generated code:
-__context__.put("current_task", "analyze auth module");
-var pastErrors = __events__.findByType("ErrorEvent");
-```
-
-### 5. Prompt Grounding and Argument-Aware Tasks
-
-A generated method is a contract plus an instruction: the `@Generate(prompt = "...")`
-supplies the instruction, while the method name, parameters, return type, and agent
-context supply the data and the structured-output contract.
-
-For content-heavy tasks, the actual argument values matter. A method like
-`summarizeNews(String articleText)` is much stronger when its prompt is explicit
-about the task and the argument carries the real article text than when it relies on
-a generic instruction. Prefer grounded, specific prompts and pass the real input as
-an argument.
-
-In practice:
-
-- keep prompt instructions clear and short
-- pass actual data as method arguments
-- use structured summaries for large inputs
-- keep output types strict so the model has a clear contract
-
-### 6. Long-Term Memory
-
-Agents accumulate knowledge across sessions in a human-readable SQLite file:
-
-```java
-var store = new MemoryStore("agent_memory.db");
-store.scheduleReflection(3600); // prune/merge every hour
-
-// Attach to an agent
-var memory = new MemorySkill(agent, store);
-
-// Write from generated code or orchestrators:
-memory.write("fact", "User prefers dark mode", 0.8, List.of("preference", "ui"));
-memory.write("episode", "Fixed auth bug in login flow", 0.9, List.of("auth", "bugfix"));
-
-// Recall relevant memories:
-var relevant = memory.recall(List.of("auth", "bugfix"), 5);
-
-// Query by type:
-var preferences = memory.query("preference", null, 10);
-
-// Link records:
-memory.relate(record1.id().toString(), "contradicts", record2.id().toString());
-memory.relate(record1.id().toString(), "supports", record3.id().toString());
-
-// Background reflection runs automatically
-// → merges duplicates, distills episodes into insights, prunes stale
-```
-
-### 7. Provider Support
-
-OpenAI, Anthropic, OpenRouter, DeepInfra, Groq, local Ollama, and any
-OpenAI-compatible endpoint — all with automatic retry on 429/5xx:
-
-```java
-// OpenAI
-var llm = UnifiedLLM.create(UnifiedLLM.openAI(key, "gpt-4o").build());
-
-// Anthropic
-var llm = UnifiedLLM.create(UnifiedLLM.anthropic(key, "claude-sonnet-4-5").build());
-
-// OpenRouter
-var llm = UnifiedLLM.create(
-    UnifiedLLM.openRouter(key, "anthropic/claude-sonnet-4-5").build());
-
-// DeepInfra (hosted open-source models)
-var llm = UnifiedLLM.create(
-    UnifiedLLM.deepInfra(key, "meta-llama/Llama-4-Maverick-17B-128E").build());
-
-// Groq (fast inference)
-var llm = UnifiedLLM.create(
-    UnifiedLLM.groq(key, "llama-4-maverick-17b-128e").build());
-
-// Local Ollama — no API key needed
-var llm = UnifiedLLM.create(UnifiedLLM.ollama("llama3.2").build());
-
-// Any OpenAI-compatible endpoint
-var llm = UnifiedLLM.create(
-    UnifiedLLM.custom("https://my-proxy.example.com/v1", key, "my-model").build());
-
-// Retry configuration
-var llm = UnifiedLLM.create(
-    UnifiedLLM.openAI(key, "gpt-4o").maxRetries(5).build());
-```
-
-### 8. Tracing
-
-Enable JSONL tracing programmatically:
-
-```java
-Tracing.enable(Tracing.jsonl(Path.of("./traces")));
-// Agent events are written as JSONL records
-```
-
-### 9. MCP Integration
-
-Connect to MCP servers for additional tools:
-
-```java
-var mcp = new McpManager()
-    .connectStdio("filesystem", List.of("npx", "-y",
-        "@modelcontextprotocol/server-filesystem", "/workspace"))
-    .connectStdio("github", List.of("npx", "-y",
-        "@modelcontextprotocol/server-github"));
-
-// Discovered tools are available to the LLM
-var tools = mcp.allTools(); // pass to generate() or CodeActStrategy
-
-// Call from generated code or orchestrators:
-mcp.callTool("filesystem", "read_file", Map.of("path", "/workspace/src/Main.java"));
-```
-
-### 10. Shell Access
-
-Agents can run commands and read/write files:
-
-```java
-var shell = new ShellTools(Path.of("/tmp/workspace"));
-shell.run("git diff HEAD~1");
-String content = shell.read("src/Main.java");
-shell.writeFile("output.txt", result);
-String preview = shell.view("large_file.log"); // auto-truncated
-```
-
-### 11. Task Tracking
-
-```java
-var todos = new TodoManager();
-var task = todos.add("Implement login", "high");
-todos.markInProgress(task.id());
-todos.markCompleted(task.id());
-System.out.println(todos.showActive());
-```
-
-## Complete Walkthrough: Research Agent
-
-```java
-@SystemPrompt("You research topics and write structured reports.")
-class ResearchAgent extends Agent {
-
-    record Report(String title, String summary, List<String> keyFindings) {}
-
-    public ResearchAgent(UnifiedLLM llm) { super(llm); }
-
-    // The LLM can use this tool from generated code
-    String searchWeb(String query) {
-        return "Results for: " + query; // real impl would call an API
-    }
-
-    // Phase 1: gather information (CodeActStrategy — default)
-    @Generate(prompt = "Gather a list of key facts about the topic using the available helper methods.")
-    public List<String> gatherFacts(String topic) {
-        // LLM calls searchWeb(), analyzes results, returns facts
-        throw new UnsupportedOperationException();
-    }
-
-    // Phase 2: write structured report (PredictStrategy)
-    @Generate(prompt = "Write a structured report from the topic and the gathered facts.")
-    @Strategy(PredictStrategy.class)
-    public Report writeReport(String topic, List<String> facts) {
-        // LLM receives facts as context, produces structured Report
-        throw new UnsupportedOperationException();
-    }
-
-    // Orchestrator — pure Java
-    public Report research(String topic) {
-        context().put("topic", topic);
-        context().putDynamic("progress", "self.getProgress()");
-
-        var facts = gatherFacts(topic);
-        return writeReport(topic, facts);
-    }
-
-    public String getProgress() {
-        return "Gathered facts: analyzing " + eventManager().size() + " events";
-    }
-}
-
-// Usage:
-var agent = AgentFactory.create(ResearchAgent.class, llm);
-Report report = agent.research("AI agent frameworks");
-System.out.println(report.title() + ": " + report.summary());
-```
-
-## Testing
-
-Uses `FakeLLMClient` for fully isolated unit tests — no API key needed:
-
-```java
-var llm = new FakeLLMClient();
-llm.respondWith("Hello, World!");  // script the response
-
-var agent = new TestAgent(llm);
-var result = strategy.execute(agent.runtime(), call);
-assertThat(result).isEqualTo("Hello, World!");
-```
-
-```bash
-mvn test
-```
+Examples need a model endpoint (local Ollama by default); see
+[examples/README.md](examples/README.md) for configuration and the full catalog.
+
+## Documentation
+
+**Foundations**
+- [Core concepts](docs/concepts.md) — the object-first model, patterns, and a full walkthrough
+- [Architecture](docs/architecture.md) — runtime pipeline and component map
+- [agent-building-guide.md](docs/agent-building-guide.md) — choosing runtime shapes, strategies, sessions, skills, and middleware
+- [prompt-engineering.md](docs/prompt-engineering.md) — how prompts are assembled and designed
+
+**Capabilities**
+- [Security and permissions](docs/security.md) — `Permissions`, the sandbox gate, and guarantee levels
+- [Observability](docs/observability.md) — events, tracing, prompt capture, ATIF
+- [Integrations](docs/integrations.md) — providers, memory, MCP, shell, task tracking
+- [Evaluating agents](docs/eval-guide.md) — datasets, scorers, reliability metrics, reports
+- [Comparison](docs/comparison.md) — NOOA vs graph-first and role-based frameworks
+
+**Reference**
+- [Package reference](docs/package-reference.md) — package map and configuration guidance
+- [Examples](examples/README.md) — runnable catalog
+- [SDK versioning](docs/sdk-versioning.md) — release and compatibility policy
+- [Contributing](CONTRIBUTING.md) — build, release, and contribution process
+- Roadmaps: [permission hardening](docs/roadmaps/permission-hardening.md), [evaluation](docs/roadmaps/eval.md)
 
 ## Why Java?
 
-The Python NOOA framework proves that **agent-as-a-single-class** produces better
-results across SWE-bench, ARC-AGI-3, and CyberGym. Six design ideas from the paper:
+The Python NOOA framework shows that **agent-as-a-single-class** produces better
+results across SWE-bench, ARC-AGI-3, and CyberGym. The six ideas map directly onto
+the JVM:
 
-| Idea | Java Implementation |
+| Idea | Java implementation |
 |---|---|
-| Typed input/output | Records as enforced return type contracts |
+| Typed input/output | Records as enforced return-type contracts |
 | Pass by reference | Live objects in JShell, not serialized text |
-| Code as action | LLM writes Java, executed in JShell |
+| Code as action | The model writes Java, executed in JShell |
 | Programmable loops | Plug-and-play `GenerationStrategy` implementations |
 | Object state | Instance fields on the Agent |
 | Model-callable APIs | `context()`, `events()`, `memory()` from generated code |

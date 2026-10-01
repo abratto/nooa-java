@@ -241,6 +241,19 @@ Use `FakeLLMClient` for deterministic unit tests, assert typed values for
 provider calls. Reserve live-model tests for a small integration suite with explicit
 credentials and cost controls.
 
+```java
+var llm = new FakeLLMClient();
+llm.respondWith("Hello, World!");        // script the response
+
+var agent = new TestAgent(llm);
+var result = agent.greet("world");
+assertThat(result).isEqualTo("Hello, World!");
+```
+
+Only public methods are model-callable, so make test targets public. Run the suite
+with `mvn test`; for evaluating agent quality against datasets, see
+[eval-guide.md](eval-guide.md).
+
 ## Production checklist
 
 Before deploying an agent, decide:

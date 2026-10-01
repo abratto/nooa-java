@@ -324,7 +324,7 @@ Markdown report.
   mirroring `examples/run.sh`.
 - SQLite run history (reuse `sqlite-jdbc`).
 - Consume `Event.PermissionDecision` once added by the permission-hardening
-  roadmap (`docs/roadmap.md`, Stage 5) to strengthen safety scorers.
+  roadmap (`permission-hardening.md`, Stage 5) to strengthen safety scorers.
 
 ## Test plan (new)
 

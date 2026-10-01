@@ -1,6 +1,6 @@
 # SDK Roadmap: Hardening CodeAct Permission Checks
 
-> See also: [docs/eval-roadmap.md](eval-roadmap.md) — the staged plan for the
+> See also: [eval.md](eval.md) — the staged plan for the
 > `ai.nooa.eval` evaluation layer. Permission-hardening Stage 3 (permission
 > gating) and Stage 5 (`PermissionDecision` events) feed that plan's safety
 > scorers.

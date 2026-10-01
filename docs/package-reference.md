@@ -65,6 +65,23 @@ Start with defaults, then tune the smallest relevant scope:
 Configuration is immutable. Build a configured `AgentConfig` before creating the
 agent; avoid mutating global settings from inside generated methods.
 
+## Visibility (`@Hidden`)
+
+`AgentDoc` describes the API the runtime exposes to generated code. Public methods
+and declared instance fields are included by default; framework methods, static
+fields, private-like methods, and explicitly hidden members are excluded. Use
+`@Hidden` to exclude a public method or instance field:
+
+```java
+@Hidden private String cachedIndex = "...";  // field
+@Hidden public void rebuildIndex() { ... }    // method
+```
+
+`@Hidden` affects generated API documentation and context state rendering. It does
+not change Java access control, erase a value from memory, or provide a security
+boundary — use `Permissions` and an isolated executor for that (see
+[security.md](security.md)).
+
 ## Security-sensitive packages
 
 ### `runtime.sandbox`
@@ -103,7 +120,7 @@ every deployment.
   production diagnostics, and redact sensitive prompts/events before exporting them.
 - `eval`: define cases and datasets, run agents in LIVE/RECORD/REPLAY, score with the
   built-in scorers, and gate on `pass@k`/`pass^k` and regression baselines. See
-  [eval-guide.md](eval-guide.md) for usage and [eval-roadmap.md](eval-roadmap.md) for
+  [eval-guide.md](eval-guide.md) for usage and [roadmaps/eval.md](roadmaps/eval.md) for
   design history.
 
 ## Audit status
