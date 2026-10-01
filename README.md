@@ -22,7 +22,7 @@ and core library maintenance happen.
 
 For the formal SDK release and compatibility policy, see [docs/sdk-versioning.md](docs/sdk-versioning.md).
 For the staged plan to harden CodeAct permission checks, see [docs/roadmap.md](docs/roadmap.md).
-For the staged plan to add agent evaluation (`ai.nooa.eval`), see [docs/eval-roadmap.md](docs/eval-roadmap.md).
+For how to evaluate agents (`ai.nooa.eval`) — datasets, scorers, reliability metrics, reports — see [docs/eval-guide.md](docs/eval-guide.md); for its design history, [docs/eval-roadmap.md](docs/eval-roadmap.md).
 For guidance on choosing runtime shapes and using sessions, skills, middleware, and
 typed failures, see [docs/agent-building-guide.md](docs/agent-building-guide.md).
 For a concrete explanation of prompt assembly and prompt design, see

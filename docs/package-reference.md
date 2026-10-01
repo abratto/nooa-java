@@ -14,6 +14,7 @@ users and maintainers; class-level API details remain in JavaDoc.
 | `ai.nooa.cli` | Interactive console and programmatic turn queues | `InteractiveAgent`, `QueueManager` |
 | `ai.nooa.config` | Immutable agent, strategy, execution, and truncation settings | `AgentConfig`, `CodeActConfig`, `PredictConfig` |
 | `ai.nooa.context` | Context blocks, events, and context-window statistics | `ContextBlock`, `Event` |
+| `ai.nooa.eval` | Evaluation harness: datasets, runner, scorers, reliability metrics, reports, baseline/history, CLI, JUnit extension | `EvalRunner`, `EvalDataset` |
 | `ai.nooa.llm` | Provider abstraction, messages, tools, responses, and structured output | `UnifiedLLM`, `StructuredOutputHelper` |
 | `ai.nooa.mcp` | MCP client, tool discovery, JSON-RPC, stdio, and SSE transports | `McpManager`, `McpClient` |
 | `ai.nooa.media` | Image, audio, video, and file content values | `Media` |
@@ -100,6 +101,10 @@ every deployment.
   durable searchable knowledge that should outlive a single agent call.
 - `atif`, `observability`, and `tracing`: enable them selectively in evaluation or
   production diagnostics, and redact sensitive prompts/events before exporting them.
+- `eval`: define cases and datasets, run agents in LIVE/RECORD/REPLAY, score with the
+  built-in scorers, and gate on `pass@k`/`pass^k` and regression baselines. See
+  [eval-guide.md](eval-guide.md) for usage and [eval-roadmap.md](eval-roadmap.md) for
+  design history.
 
 ## Audit status
 
