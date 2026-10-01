@@ -21,8 +21,8 @@ The repository uses Maven versions in the form:
 
 Example:
 
-- `0.7.0-SNAPSHOT` = development version leading up to the `v0.7.0` release
-- `v0.7.0` = current tagged release for the corresponding artifact version
+- `0.8.0-SNAPSHOT` = development version leading up to the `v0.8.0` release
+- `v0.8.0` = current tagged release for the corresponding artifact version
 
 ## Source-of-truth model
 
@@ -84,7 +84,7 @@ Example:
 <dependency>
   <groupId>ai.nooa</groupId>
   <artifactId>nooa-core</artifactId>
-  <version>0.7.0</version>
+  <version>0.8.0</version>
 </dependency>
 ```
 

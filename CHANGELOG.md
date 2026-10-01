@@ -1,17 +1,30 @@
 # Changelog
 
-## v0.7.1 (unreleased)
+## v0.8.0 (2026-10-01)
+
+### Added
+- `ai.nooa.eval` evaluation layer: `EvalCase`/`EvalDataset` (JSONL), `EvalRunner` (LIVE/RECORD/REPLAY, trials, goal verification), `RunRecorder`/`RunTrace`, `Scorer`/`Score` with applicability, `Rubric`, `GoalVerifier`/`PostState`, `ModelPricing` with `NOOA_PRICE_*` overrides, `EvalReport` (JSON + Markdown), `EvalAssertions`, `EvalBaseline`, and `EvalHistoryStore` (SQLite run history)
+- Correctness, tool-use, safety, and ops scorers; completion reliability metrics (`pass@1`, `pass@k`, `pass^k`, flakiness) and horizon (step-count) buckets
+- `Judge` SPI with an opt-in `LlmJudge`, `FakeJudge`, and `JudgeScorer`; context-grounding, loop-termination, step-efficiency, and meltdown scorers
+- `RecordingLLMClient` / `ReplayLLMClient` for deterministic record/replay evaluation
+- `nooa-eval` CLI (`ai.nooa.eval.cli.EvalCli` + `LlmFactory`) and a reference JUnit 5 extension (`EvalExtension` / `@Eval`)
+- `Event.Retry` (strategy/condition retries) and `Event.PermissionDecision` (sandbox audit), the latter exported through ATIF and `AgentSnapshot`
+- `CodePermissionAnalyzer`: JavaParser AST-based sandbox permission gate
+- New runtime dependency: `com.github.javaparser:javaparser-core` 3.28.0
 
 ### Changed
-- `PredictStrategy` reuses a single `private static final ObjectMapper JSON` instead of constructing a new mapper on every response parse
-- `MemoryStore.close()` now awaits reflection-executor termination (3s) after `shutdownNow()`, restoring the interrupt flag and logging on timeout, so a scheduled flush can no longer be silently dropped
-- Removed leftover empty directory trees (`nooa-core/.../runtime/{sandbox}`, `nooa-core/src/main/java/com`, and the root `tests/` scaffold)
-- Added SLF4J debug logging for malformed JSON-RPC payloads in `SseTransport` and `StdioTransport`; failures were previously swallowed silently
-- Documented the null-return contract of `Agent.findSystemPrompt()` and the timeout/interrupt behavior of `SseTransport.receive()`
+- `Permissions` resolves symlinks in file checks so a link inside an allowed root cannot escape it, and matches the most-specific rule regardless of insertion order
+- `ShellTools` fails closed when a command is `ASK` and no `PermissionCallback` is registered
+- `JShellSandbox` bounds captured stdout/stderr at 1 MiB per stream; blocked-API detection is now AST-based with a contains-scan fallback
+- `PredictStrategy` reuses a single `private static final ObjectMapper JSON` instead of constructing one per response parse
+- `MemoryStore.close()` awaits reflection-executor termination (3s) after `shutdownNow()`, restoring the interrupt flag and logging on timeout
+- README and `docs/sdk-versioning.md` document the eval layer and sandbox permission guarantee levels
 
 ### Fixed
-- `SseTransport.connect()` now closes the HTTP response body stream when the SSE handshake returns non-200, fixing a connection leak
-- `SseTransport.close()` now closes the underlying SSE input stream, which is what unblocks the reader thread parked in `BufferedReader.readLine()`; the thread interrupt is retained as a secondary measure
+- `SseTransport.connect()` closes the HTTP response body stream on a non-200 handshake, fixing a connection leak
+- `SseTransport.close()` closes the underlying SSE input stream, which is what unblocks the reader thread parked in `BufferedReader.readLine()`; the thread interrupt is retained as a secondary measure
+- Malformed JSON-RPC payloads are logged (debug) in `SseTransport` and `StdioTransport` instead of being silently swallowed
+- Documented the null-return contract of `Agent.findSystemPrompt()` and the timeout/interrupt behavior of `SseTransport.receive()`
 
 ## v0.6.0 (2026-09-13)
 
