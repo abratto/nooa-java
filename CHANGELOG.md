@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.2 (2026-10-01)
+
+### Fixed
+- README examples now use the current `@Generate(prompt = "...")` API instead of presenting a Javadoc comment as the prompt, and the Quick Start shows the class-level `@SystemPrompt` persona and required imports
+- Corrected the prompt explanation: the `@Generate` prompt is the instruction, while the method name, arguments, and return type supply the data and the structured-output contract
+
 ## v0.8.1 (2026-10-01)
 
 ### Added
