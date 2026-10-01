@@ -1,6 +1,7 @@
 package ai.nooa.runtime.sandbox;
 
 import ai.nooa.Agent;
+import ai.nooa.context.Event;
 import ai.nooa.strategy.ExecutionResult;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -37,16 +38,9 @@ public final class JShellSandbox implements SandboxExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(JShellSandbox.class);
 
-    private static final Set<String> BLOCKED_PACKAGES = Set.of(
-        "java.lang.reflect", "java.lang.invoke", "sun.",
-        "jdk.internal", "java.lang.ProcessBuilder", "java.lang.Runtime",
-        "java.lang.ClassLoader", "java.io.File", "java.nio.file", "java.net.Socket",
-        "java.lang.System", "java.net.URL", "java.net.URI",
-        "java.lang.Class.forName", "java.lang.Thread", "javax.script"
-    );
-
     private static final long DEFAULT_TIMEOUT_MS = 30_000;
 
+    private final Agent agent;
     private final JShell jshell;
     private final ByteArrayOutputStream stdoutCapture = new ByteArrayOutputStream();
     private final ByteArrayOutputStream stderrCapture = new ByteArrayOutputStream();
@@ -58,6 +52,7 @@ public final class JShellSandbox implements SandboxExecutor {
     }
 
     public JShellSandbox(Agent agent, long timeoutMs) {
+        this.agent = agent;
         this.timeoutMs = timeoutMs;
         this.jshell = JShell.builder()
             .out(new PrintStream(stdoutCapture))
@@ -206,8 +201,11 @@ public final class JShellSandbox implements SandboxExecutor {
         stdoutCapture.reset();
         stderrCapture.reset();
 
-        if (containsBlockedImports(code)) {
-            return new ExecutionResult("", "", blockedApiIn(code), null, false, false);
+        CodePermissionAnalyzer.Decision decision = CodePermissionAnalyzer.analyze(
+            code, agent.permissions(), agent.permissionCallback());
+        emitPermissionDecisions(decision, code);
+        if (!decision.allowed()) {
+            return new ExecutionResult("", "", decision.reason(), null, false, false);
         }
 
         try {
@@ -354,89 +352,25 @@ public final class JShellSandbox implements SandboxExecutor {
     }
 
     /**
-     * Identify the first blocked API referenced by the code and describe it
-     * for the model. Naming the specific API lets the CodeAct loop self-correct
-     * (for example by calling an {@code __agent__} helper instead of
-     * {@code java.lang.System}).
+     * Emit a structured audit event for each restricted resource touched by the
+     * cell, with the effective ALLOW / ASK / DENY level and a short code excerpt.
      */
-    private String blockedApiIn(String code) {
-        for (String blocked : BLOCKED_PACKAGES) {
-            if (code.contains(blocked)) {
-                var perms = SandboxContext.getAgent().permissions();
-                if (!isAllowedByPermissions(code, blocked, perms)) {
-                    return "Blocked API used: " + blocked
-                        + " — this API is denied by the agent's permissions."
-                        + " Use an __agent__ helper method or returnResult instead.";
-                }
-            }
+    private void emitPermissionDecisions(CodePermissionAnalyzer.Decision decision, String code) {
+        if (decision.findings().isEmpty()) {
+            return;
         }
-        return "Blocked import or API used";
-    }
-
-    private boolean containsBlockedImports(String code) {
-        for (String blocked : BLOCKED_PACKAGES) {
-            if (!code.contains(blocked)) {
-                continue;
-            }
-
-            log.warn("Blocked API usage: {}", blocked);
-            var perms = SandboxContext.getAgent().permissions();
-            return !isAllowedByPermissions(code, blocked, perms);
+        String excerpt = code.strip();
+        if (excerpt.length() > 200) {
+            excerpt = excerpt.substring(0, 200) + "...";
         }
-        return false;
-    }
-
-    private boolean isAllowedByPermissions(String code, String blocked,
-            ai.nooa.security.Permissions perms) {
-        if (blocked.startsWith("java.io.File") || blocked.startsWith("java.nio.file")) {
-            return isFileAccessAllowed(code, perms);
+        for (CodePermissionAnalyzer.Finding finding : decision.findings()) {
+            agent.eventManager().add(new Event.PermissionDecision(
+                CodePermissionAnalyzer.resourceName(finding.category()),
+                finding.value(),
+                finding.level().name(),
+                finding.detail(),
+                excerpt));
         }
-        if (blocked.startsWith("java.lang.reflect") || blocked.startsWith("java.lang.invoke")
-            || blocked.startsWith("java.lang.ClassLoader")) {
-            return isClassLoadAllowed(code, perms);
-        }
-        if (blocked.equals("java.net.URL") || blocked.equals("java.net.URI")) {
-            return isUrlAccessAllowed(code, perms);
-        }
-        return false;
-    }
-
-    private boolean isClassLoadAllowed(String code, ai.nooa.security.Permissions perms) {
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(
-            "(?:import\\s+|new\\s+|\\()([a-zA-Z_$][\\w$]*(?:\\.[a-zA-Z_$][\\w$]*)++)").matcher(code);
-        while (matcher.find()) {
-            if (perms.checkClassLoad(matcher.group(1))
-                == ai.nooa.security.Permissions.Level.ALLOW) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean isFileAccessAllowed(String code, ai.nooa.security.Permissions perms) {
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(
-            "\"(/[^\"]+)\"|'([^']+)'").matcher(code);
-        while (matcher.find()) {
-            String path = matcher.group(1);
-            if (path == null) path = matcher.group(2);
-            if (perms.checkFile(path) == ai.nooa.security.Permissions.Level.ALLOW) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean isUrlAccessAllowed(String code, ai.nooa.security.Permissions perms) {
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(
-            "\"(https?://[^\"]+)\"|'(https?://[^']+)'").matcher(code);
-        while (matcher.find()) {
-            String url = matcher.group(1);
-            if (url == null) url = matcher.group(2);
-            if (perms.checkUrl(url) == ai.nooa.security.Permissions.Level.ALLOW) {
-                return true;
-            }
-        }
-        return false;
     }
 
     @Override

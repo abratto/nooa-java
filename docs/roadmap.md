@@ -50,6 +50,19 @@ Known weaknesses, to be closed by the stages below:
    must be verified to default to DENY.
 6. Audit trail is a single `log.warn`; no structured permission event.
 
+## Status
+
+- **Stage 1 — implemented.** `CodePermissionAnalyzer` parses each cell with
+  JavaParser and resolves restricted API usage by AST node (imports, qualified
+  types, object creations, reflection/sink calls, string literals), with a
+  fallback contains-scan when parsing fails. Sink calls with non-literal
+  arguments, wildcard imports of restricted packages, and `Class.forName`
+  built from pieces are now caught. `Event.PermissionDecision` audit events
+  are emitted for every restricted finding. Existing `Permissions` allow
+  rules (file/classLoad/url) still apply, and dynamic resources route to the
+  `PermissionCallback` (deny when absent).
+- **Stages 2-5 — pending.**
+
 ## Current guards (out of scope for this plan, already present)
 
 For completeness, these loop-level guards already exist and are NOT

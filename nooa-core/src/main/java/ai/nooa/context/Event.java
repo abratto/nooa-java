@@ -13,7 +13,7 @@ public sealed interface Event
            Event.BeforeAgentCall, Event.AfterAgentCall,
            Event.LLMCallStart, Event.LLMCallEnd,
            Event.Feedback, Event.Summary, Event.LLMComplete,
-           Event.PromptBuilt, Event.Retry {
+           Event.PromptBuilt, Event.Retry, Event.PermissionDecision {
 
     UUID id();
     Instant timestamp();
@@ -38,6 +38,7 @@ public sealed interface Event
             case LLMComplete _ -> "system";
             case PromptBuilt _ -> "system";
             case Retry _ -> "system";
+            case PermissionDecision _ -> "system";
         };
     }
 
@@ -172,6 +173,24 @@ public sealed interface Event
                  String reason, String exceptionType) implements Event {
         public Retry(String methodName, int attempt, String reason, String exceptionType) {
             this(UUID.randomUUID(), Instant.now(), methodName, attempt, reason, exceptionType);
+        }
+    }
+
+    /**
+     * Audit record for a sandbox permission decision.
+     *
+     * @param resource one of {@code file}, {@code url}, {@code command},
+     *                 {@code class}, or {@code dynamic}
+     * @param detail   the resolved resource value, or a description when dynamic
+     * @param level    the effective decision ({@code ALLOW}, {@code ASK}, {@code DENY})
+     * @param rule     the matching rule or reason
+     * @param excerpt  the offending code excerpt (truncated)
+     */
+    record PermissionDecision(UUID id, Instant timestamp, String resource, String detail,
+                              String level, String rule, String excerpt) implements Event {
+        public PermissionDecision(String resource, String detail, String level,
+                                  String rule, String excerpt) {
+            this(UUID.randomUUID(), Instant.now(), resource, detail, level, rule, excerpt);
         }
     }
 }
