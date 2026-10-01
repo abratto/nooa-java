@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.8.1 (2026-10-01)
+
+### Added
+- `PermissionComplianceScorer` and the `permissionDecisions` `RunTrace` signal: evaluation safety scoring over the sandbox's `Event.PermissionDecision` audit trail (fails on any denied resource access)
+- `docs/eval-guide.md`: user guide covering datasets, the runner, each scorer and what it measures, reliability metrics, goal verification, record/replay, cost, reports/baselines/history, the CLI, and the JUnit 5 extension
+
+### Changed
+- README and the package reference now link the evaluation guide
+
 ## v0.8.0 (2026-10-01)
 
 ### Added
