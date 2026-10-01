@@ -1,14 +1,18 @@
 package ai.nooa.eval;
 
 import ai.nooa.eval.scorers.ContainsScorer;
+import ai.nooa.eval.scorers.ContextGroundingScorer;
 import ai.nooa.eval.scorers.CostBudgetScorer;
 import ai.nooa.eval.scorers.ExactMatchScorer;
 import ai.nooa.eval.scorers.ForbiddenToolsScorer;
 import ai.nooa.eval.scorers.LatencyBudgetScorer;
+import ai.nooa.eval.scorers.LoopTerminationScorer;
+import ai.nooa.eval.scorers.MeltdownScorer;
 import ai.nooa.eval.scorers.MilestoneScorer;
 import ai.nooa.eval.scorers.PolicyComplianceScorer;
 import ai.nooa.eval.scorers.RequiredToolsScorer;
 import ai.nooa.eval.scorers.SecretLeakScorer;
+import ai.nooa.eval.scorers.StepEfficiencyScorer;
 import ai.nooa.eval.scorers.StructuredFieldScorer;
 import ai.nooa.eval.scorers.TokenBudgetScorer;
 import ai.nooa.eval.scorers.ToolEfficiencyScorer;
@@ -52,7 +56,11 @@ public record Rubric(List<WeightedScorer> scorers) {
             new WeightedScorer(new SecretLeakScorer(), 5.0),
             new WeightedScorer(new LatencyBudgetScorer(), 5.0),
             new WeightedScorer(new TokenBudgetScorer(), 3.0),
-            new WeightedScorer(new CostBudgetScorer(), 2.0)));
+            new WeightedScorer(new CostBudgetScorer(), 2.0),
+            new WeightedScorer(new LoopTerminationScorer(), 5.0),
+            new WeightedScorer(new ContextGroundingScorer(), 5.0),
+            new WeightedScorer(new StepEfficiencyScorer(), 3.0),
+            new WeightedScorer(new MeltdownScorer(), 3.0)));
     }
 
     public static Rubric of(Scorer... scorerList) {

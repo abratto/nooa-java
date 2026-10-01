@@ -76,6 +76,7 @@ public final class EvalRunner implements AutoCloseable {
             List<RunTrace> traces = new ArrayList<>();
             List<GoalVerifier.Completion> goals = new ArrayList<>();
             List<Boolean> trialSuccess = new ArrayList<>();
+            int caseSteps = 0;
 
             for (int trial = 0; trial < trials; trial++) {
                 Agent agent = AgentFactory.create(agentClass, effectiveLlm, extraArgs);
@@ -106,6 +107,7 @@ public final class EvalRunner implements AutoCloseable {
                 traces.add(trace);
                 goals.add(goal);
                 trialSuccess.add(goal.achieved() && present);
+                caseSteps = Math.max(caseSteps, trace.stepCount());
                 closeQuietly(agent);
             }
 
@@ -131,7 +133,8 @@ public final class EvalRunner implements AutoCloseable {
                 completion,
                 trialSuccess,
                 traces.isEmpty() || traces.get(0).output() == null
-                    ? null : String.valueOf(traces.get(0).output())));
+                    ? null : String.valueOf(traces.get(0).output()),
+                caseSteps));
         }
 
         Map<String, Double> scorerMeans = new LinkedHashMap<>();

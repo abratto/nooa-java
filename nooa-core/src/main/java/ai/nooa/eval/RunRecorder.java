@@ -87,6 +87,8 @@ public final class RunRecorder implements AutoCloseable {
         boolean pricingKnown = true;
         long firstTimestamp = 0;
         long lastTimestamp = 0;
+        String lastPromptText = null;
+        java.util.List<String> toolSequence = new java.util.ArrayList<>();
 
         for (Event event : events) {
             long ts = event.timestamp().toEpochMilli();
@@ -133,6 +135,7 @@ public final class RunRecorder implements AutoCloseable {
                 }
                 case Event.ToolCallEvent e -> {
                     toolCalls++;
+                    toolSequence.add(e.toolName());
                     builder.toolName(e.toolName());
                 }
                 case Event.ToolResultEvent e -> {
@@ -140,7 +143,10 @@ public final class RunRecorder implements AutoCloseable {
                         toolErrors++;
                     }
                 }
-                case Event.PromptBuilt e -> builder.promptFingerprint(fingerprint(e));
+                case Event.PromptBuilt e -> {
+                    builder.promptFingerprint(fingerprint(e));
+                    lastPromptText = promptText(e);
+                }
                 case Event.Retry _ -> retries++;
                 default -> { }
             }
@@ -149,6 +155,11 @@ public final class RunRecorder implements AutoCloseable {
         long effectiveDuration = durationMs > 0
             ? durationMs
             : (lastTimestamp > firstTimestamp ? lastTimestamp - firstTimestamp : 0);
+
+        if (lastPromptText != null) {
+            builder.signal("lastPrompt", lastPromptText);
+        }
+        builder.signal("toolEntropy", entropy(toolSequence));
 
         Double costUsd = (anyLlmComplete && pricingKnown) ? cost : null;
         return builder
@@ -160,6 +171,36 @@ public final class RunRecorder implements AutoCloseable {
             .steps(steps)
             .retries(retries)
             .build();
+    }
+
+    private static String promptText(Event.PromptBuilt event) {
+        StringBuilder sb = new StringBuilder();
+        for (Message message : event.messages()) {
+            if (message.content() != null && !message.content().isBlank()) {
+                if (sb.length() > 0) {
+                    sb.append('\n');
+                }
+                sb.append(message.content());
+            }
+        }
+        return sb.toString();
+    }
+
+    private static double entropy(java.util.List<String> values) {
+        if (values.isEmpty()) {
+            return 0.0;
+        }
+        java.util.Map<String, Integer> frequency = new java.util.HashMap<>();
+        for (String value : values) {
+            frequency.merge(value, 1, Integer::sum);
+        }
+        double entropy = 0.0;
+        int total = values.size();
+        for (int count : frequency.values()) {
+            double p = (double) count / total;
+            entropy -= p * (Math.log(p) / Math.log(2));
+        }
+        return entropy;
     }
 
     private static boolean looksLikeError(String result) {

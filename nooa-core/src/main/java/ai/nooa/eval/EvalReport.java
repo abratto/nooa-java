@@ -44,7 +44,8 @@ public record EvalReport(
         GoalVerifier.Completion goal,
         CompletionMetrics completion,
         List<Boolean> trialSuccess,
-        String output) {}
+        String output,
+        int steps) {}
 
     /**
      * @param scorerMeans mean value per scorer across cases
@@ -93,6 +94,16 @@ public record EvalReport(
                 report.caseId(), report.weighted(),
                 report.completion().passAt1(), report.completion().passHatK(),
                 String.join(",", report.tags())));
+        }
+        var horizon = HorizonReliability.of(cases);
+        if (!horizon.isEmpty()) {
+            sb.append("\n## Reliability by horizon\n\n");
+            sb.append("| steps | cases | pass@1 | pass^k |\n|---|---|---|---|\n");
+            for (HorizonReliability.Bucket bucket : horizon) {
+                sb.append(String.format("| %s | %d | %.3f | %.3f |%n",
+                    bucket.label(), bucket.cases(),
+                    bucket.completion().passAt1(), bucket.completion().passHatK()));
+            }
         }
         return sb.toString();
     }

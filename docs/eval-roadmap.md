@@ -22,9 +22,14 @@ everything lives in the `nooa-core` module under package `ai.nooa.eval`.
   `Mode`, tool/safety/ops scorers, `EvalBaseline` +
   `EvalAssertions.assertNoRegression`, and the small core addition
   `Event.Retry` (emitted by `PredictStrategy` and postcondition validation).
-- **Phase 2 (judge, horizon, meltdown) and Phase 3 (JUnit/CLI, history) — pending.**
+- **Phase 2 — implemented.** `judge/Judge` SPI, opt-in `LlmJudge`,
+  `FakeJudge`, `JudgeScorer`; `ContextGroundingScorer` (promoted from the
+  test-only harness); `LoopTerminationScorer`, `StepEfficiencyScorer`,
+  `MeltdownScorer` (tool-call entropy signal); and `HorizonReliability`
+  (pass^k bucketed by step count, rendered in the Markdown report).
+- **Phase 3 (JUnit/CLI, SQLite history, PermissionDecision integration) — pending.**
 
-Tests: `EvalPhase0Test`, `EvalPhase1Test` (14 tests).
+Tests: `EvalPhase0Test`, `EvalPhase1Test`, `EvalPhase2Test` (21 tests).
 
 ## Decisions log (confirmed)
 
