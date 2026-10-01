@@ -27,9 +27,11 @@ everything lives in the `nooa-core` module under package `ai.nooa.eval`.
   test-only harness); `LoopTerminationScorer`, `StepEfficiencyScorer`,
   `MeltdownScorer` (tool-call entropy signal); and `HorizonReliability`
   (pass^k bucketed by step count, rendered in the Markdown report).
-- **Phase 3 (JUnit/CLI, SQLite history, PermissionDecision integration) — pending.**
+- **Phase 3 — partial.** `EvalHistoryStore` (SQLite run history, record /
+  recent / load). The JUnit 5 extension, `nooa-eval` CLI, and
+  `PermissionDecision` integration remain pending.
 
-Tests: `EvalPhase0Test`, `EvalPhase1Test`, `EvalPhase2Test` (21 tests).
+Tests: `EvalPhase0Test`, `EvalPhase1Test`, `EvalPhase2Test`, `EvalPhase3Test` (22 tests).
 
 ## Decisions log (confirmed)
 
