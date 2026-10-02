@@ -44,8 +44,8 @@ CATALOG=(
   "LegalIntakeDemo|Structured legal triage with PredictStrategy|yes|no|no"
   "NewsDigestAgent|Deterministic fetch + typed model summary|yes|no|no"
   "WeatherAgent|HTTP fetch + two-stage typed generation|yes|yes|no"
-  "IncidentDemo|Sealed-type state machine: incident response with approval gate|yes|no|no"
-  "ReleaseDemo|Enum-style state machine: release gate|yes|no|no"
+  "ai.nooa.examples.incident.IncidentDemo|Sealed-type state machine: incident response with approval gate|yes|no|no"
+  "ai.nooa.examples.release.ReleaseDemo|Enum-style state machine: release gate|yes|no|no"
   "Examples04to15|Compatibility notice for the old combined launcher|no|no|no"
   "Examples10to11|Compatibility notice for the old memory/MCP launcher|no|no|no"
 )
@@ -83,7 +83,7 @@ list_examples() {
     [ "$network" = "yes" ] && req="${req}network "
     [ "$node" = "yes" ] && req="${req}node "
     [ -z "$req" ] && req="none"
-    printf '%-24s %-60s %s\n' "$class" "$label" "${req% }"
+    printf '%-24s %-60s %s\n' "${class##*.}" "$label" "${req% }"
   done
 }
 
@@ -91,12 +91,36 @@ entry_for() {
   local needle="$1"
   for entry in "${CATALOG[@]}"; do
     IFS='|' read -r class label model network node <<<"$entry"
-    if [ "$class" = "$needle" ] || [ "ai.nooa.examples.$class" = "$needle" ]; then
+    if [ "$class" = "$needle" ] || [ "${class##*.}" = "$needle" ] \
+        || [ "ai.nooa.examples.$class" = "$needle" ] \
+        || [ "ai.nooa.examples.$needle" = "$class" ]; then
       echo "$entry"
       return 0
     fi
   done
   return 1
+}
+
+# Resolve a catalog short name or a fully-qualified class to a main class.
+main_class_for() {
+  local needle="$1"
+  for entry in "${CATALOG[@]}"; do
+    IFS='|' read -r class label model network node <<<"$entry"
+    local fqcn="$class"
+    case "$class" in
+      *.*) ;;                                   # already fully qualified
+      *)   fqcn="ai.nooa.examples.$class" ;;     # legacy short entry
+    esac
+    if [ "$fqcn" = "$needle" ] || [ "${class##*.}" = "$needle" ] \
+        || [ "$class" = "$needle" ]; then
+      printf '%s' "$fqcn"
+      return 0
+    fi
+  done
+  case "$needle" in
+    *.*) printf '%s' "$needle" ;;
+    *)   printf 'ai.nooa.examples.%s' "$needle" ;;
+  esac
 }
 
 ollama_model_present() {
@@ -132,7 +156,9 @@ run_with_timeout() {
 }
 
 run_one() {
-  local class="$1" fqcn="ai.nooa.examples.$1"
+  local name="$1"
+  local fqcn
+  fqcn="$(main_class_for "$name")"
   local timeout="$TIMEOUT"
 
   echo
