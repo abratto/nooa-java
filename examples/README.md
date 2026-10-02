@@ -101,6 +101,8 @@ Runnable entry points (`./examples/run.sh <name>`):
 | `LegalIntakeDemo` | Structured triage via `@Generate`/`PredictStrategy` and via `StructuredOutputHelper` | Model endpoint |
 | `NewsDigestAgent` | Deterministic input preparation followed by typed model summarization (has its own `main`) | Model endpoint |
 | `WeatherAgent` | HTTP/JSON collection, typed records, two-stage typed generation, Java orchestration (has its own `main`) | Model endpoint and network access to `api.weather.gov` |
+| `IncidentDemo` | Incident-response workflow as a **sealed-type state machine**: telemetry helpers, CodeAct investigation, typed remediation, human approval gate | Model endpoint |
+| `ReleaseDemo` | Release gate as an **enum-style state machine** (payload-free phases with abstract transition methods) | Model endpoint |
 | `Examples04to15` | Compatibility notice for the old combined launcher | Nothing |
 | `Examples10to11` | Compatibility notice for the old memory/MCP launcher | Nothing |
 
@@ -123,6 +125,8 @@ them via `AgentFactory.create(...)` in your own code):
 | `SnapshotDemoAgent` | Agent context and event snapshot/restore payload |
 | `SummarizationDemoAgent` | `TokenBudgetSummarizer` installation around a generated conversation |
 | `TraceDemoAgent` | Agent/LLM/code tracing target |
+| `IncidentAgent` | Object-first workflow: `state` field + pure sealed-type transition function, typed `@Generate` payloads, deterministic telemetry helpers, `ApprovalGate` |
+| `ReleaseGateAgent` | Drives an enum-style FSM (see the `release` package) |
 
 ## What each example teaches
 
@@ -158,6 +162,14 @@ generated methods with typed inputs and outputs.
 `LegalIntakeDemo` is an example of constrained classification, not legal advice.
 Its prompt and result schema classify and route an intake message; an
 application must still apply its own legal review and escalation policy.
+
+The `incident` and `release` examples show the two ways to model a workflow as a
+state machine in modern Java. `IncidentAgent` uses **sealed interfaces + records
++ pattern-matching `switch`** for a real workflow where each state carries data
+and transitions have guards (for example, a remediation cannot be resolved until
+verification passes), with Java owning every transition and the model supplying
+typed payloads. `ReleaseGateAgent` uses the **enum-with-abstract-methods** style
+for a payload-free pipeline. See `docs/concepts.md` for the contrast.
 
 ### Runtime services
 

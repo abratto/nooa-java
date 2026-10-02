@@ -154,63 +154,75 @@ class PeriodicNewsAgent extends Agent {
 }
 ```
 
-## A workflow is the agent's control flow
+## State-machine agents
 
 Many agent systems are described as graphs or state machines. In NOOA the state
-machine is expressed in Java, not a separate workflow DSL.
+machine is expressed in Java, not a separate workflow DSL, and you can pick the
+Java idiom that fits the problem.
+
+| Idiom | Use when | Trade-off |
+|---|---|---|
+| **Enum with abstract transition methods** | States carry no data and the FSM is small (gates, toggles, pipelines) | Zero boilerplate and one-file locality, but states cannot hold payloads |
+| **Sealed interfaces + records + pattern-matching `switch`** | Real workflows where states carry data and transitions have guards | More types, but exhaustive compile-time checks and payloads per state |
+
+### Enum style (payload-free)
 
 ```java
-enum WorkflowState { INTAKE, VALIDATE, ROUTE, INVESTIGATE, PLAN, EXECUTE, REVIEW, ESCALATED }
+public enum ReleasePhase {
+    PLANNED  { public ReleasePhase advance(ReleaseEvent e) { return switch (e) {
+        case START_BUILD -> BUILDING; default -> illegal(this, e); } } },
+    BUILDING { public ReleasePhase advance(ReleaseEvent e) { return switch (e) {
+        case TESTS_PASS -> TESTING; case TESTS_FAIL -> REJECTED; default -> illegal(this, e); } } },
+    // ... APPROVED, DEPLOYED, REJECTED, ROLLED_BACK
+    ;
+    public abstract ReleasePhase advance(ReleaseEvent event);
+}
+```
 
-@SystemPrompt("You are a support and operations agent for customer requests.")
-class SupportWorkflowAgent extends Agent {
-    private WorkflowState state = WorkflowState.INTAKE;
-    private final List<String> notes = new ArrayList<>();
+### Sealed-types style (states carry data)
 
-    public SupportWorkflowAgent(UnifiedLLM llm) { super(llm); }
+```java
+public sealed interface IncidentState permits Detected, Triaged, /* ... */ Escalated {
+    record Detected(IncidentReport report) implements IncidentState {}
+    record Triaged(Severity severity, String summary) implements IncidentState {}
+    record Mitigating(RemediationPlan plan, String approver, boolean verified) implements IncidentState {}
+    // ...
+}
 
-    // Deterministic Java transitions
-    void markValidated() { state = WorkflowState.ROUTE; }
-    void markNeedsReview() { state = WorkflowState.INVESTIGATE; }
-    void markEscalated() { state = WorkflowState.ESCALATED; }
-
-    // Model-powered steps
-    @Generate(prompt = "Validate the request. Reply 'ok' or 'needs_review' plus a one-line reason.")
-    public String validateCase(String request) { throw new UnsupportedOperationException(); }
-
-    @Generate(prompt = "Investigate the request and list the relevant findings.")
-    public String investigateIssue(String request) { throw new UnsupportedOperationException(); }
-
-    @Generate(prompt = "Create a short, concrete action plan from the issue summary.")
-    public String createPlan(String issueSummary) { throw new UnsupportedOperationException(); }
-
-    @Generate(prompt = "Execute the plan and describe the outcome in one or two sentences.")
-    public String executeAction(String plan) { throw new UnsupportedOperationException(); }
-
-    // Orchestrator: this is the workflow
-    public String handleRequest(String request) {
-        state = WorkflowState.INTAKE;
-        notes.add(request);
-
-        var validation = validateCase(request);
-        if (validation.contains("needs_review")) {
-            state = WorkflowState.INVESTIGATE;
-            var plan = createPlan(investigateIssue(request));
-            state = WorkflowState.PLAN;
-            return executeAction(plan);
-        }
-        state = WorkflowState.ROUTE;
-        return validation;
-    }
+static Transition transition(IncidentState current, IncidentEvent event) {
+    return switch (current) {
+        case Mitigating state -> switch (event) {
+            case Verify e when e.healthy() -> accepted(new Mitigating(state.plan(), state.approver(), true));
+            case Resolve e when state.verified() -> accepted(new Resolved(e.postmortem()));
+            case Resolve e -> reject(state, event);          // must verify first
+            default -> reject(state, event);
+        };
+        // ... every other state (the compiler enforces exhaustiveness)
+    };
 }
 ```
 
 The workflow is not a separate engine; it is the agent's Java control flow plus
-the runtime-provided LLM capabilities. It can loop, escalate, and revisit states:
+the runtime-provided LLM capabilities:
 
-- validate → loop back to investigate if information is missing
-- plan → execute → review → loop if the result is incomplete
-- escalate when the agent hits a blocker or risk threshold
+- **Java owns the transitions.** The agent's orchestrator fires events; illegal
+  transitions are returned as data (`Transition.Rejected`) and surfaced as a
+  typed error only at the boundary.
+- **The model produces typed payloads.** `@Generate` methods return records
+  (`Severity`, `Hypothesis`, `RemediationPlan`, `Postmortem`) via `Predict`, or
+  slice telemetry with helper methods via CodeAct.
+- **The model always sees the current state** through a dynamic context block
+  (`context().putDynamic("incident_state", "self.status()")`).
+- **Humans stay in the loop** for consequential steps via an `ApprovalGate`.
+
+Two runnable examples demonstrate both idioms:
+
+- `ai.nooa.examples.incident` — the sealed-types incident-response agent
+  (`IncidentState`, `IncidentEvent`, `IncidentStateMachine`, `IncidentAgent`),
+  with scenarios, human approval, and an `EvalRunner` test.
+- `ai.nooa.examples.release` — the enum-style release gate (`ReleasePhase`,
+  `ReleaseGateAgent`).
+
 
 ## Complete walkthrough: a research agent
 

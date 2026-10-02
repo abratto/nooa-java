@@ -44,6 +44,8 @@ CATALOG=(
   "LegalIntakeDemo|Structured legal triage with PredictStrategy|yes|no|no"
   "NewsDigestAgent|Deterministic fetch + typed model summary|yes|no|no"
   "WeatherAgent|HTTP fetch + two-stage typed generation|yes|yes|no"
+  "IncidentDemo|Sealed-type state machine: incident response with approval gate|yes|no|no"
+  "ReleaseDemo|Enum-style state machine: release gate|yes|no|no"
   "Examples04to15|Compatibility notice for the old combined launcher|no|no|no"
   "Examples10to11|Compatibility notice for the old memory/MCP launcher|no|no|no"
 )
