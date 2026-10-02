@@ -185,8 +185,22 @@ public class UnifiedLLM {
             throw new LLMException("LLM call interrupted", 0);
         } catch (Exception e) {
             if (e instanceof LLMException le) throw le;
-            throw new LLMException("LLM call failed: " + e.getMessage(), 0);
+            throw new LLMException(
+                "LLM call to " + model + " at " + baseUrl + " failed: " + describe(e), 0);
         }
+    }
+
+    /** A readable message for an exception, falling back to its type when null. */
+    private static String describe(Throwable error) {
+        String message = error.getMessage();
+        if (message != null && !message.isBlank()) {
+            return message;
+        }
+        Throwable cause = error.getCause();
+        if (cause != null && cause != error) {
+            return error.getClass().getSimpleName() + " -> " + describe(cause);
+        }
+        return error.getClass().getName();
     }
 
     private LLMResponse doChat(
