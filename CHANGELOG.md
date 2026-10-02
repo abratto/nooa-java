@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.9.2 (2026-10-01)
+
+### Fixed
+- `examples/run.sh` now resolves both short catalog names and package-qualified main classes, so the `incident` and `release` demos run (previously they failed with `ClassNotFoundException` because the runner always prefixed names with `ai.nooa.examples.`)
+
 ## v0.9.1 (2026-10-01)
 
 ### Fixed
