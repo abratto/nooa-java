@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9.0 (2026-10-01)
+
+### Added
+- `examples`: `ai.nooa.examples.incident` — an incident-response agent whose workflow is a compile-time-checked state machine (sealed `IncidentState`/`IncidentEvent`, a pure `(state, event) -> Transition` function with guards), with deterministic telemetry helpers, CodeAct investigation, typed `Predict` payloads, a human `ApprovalGate`, and canned scenarios
+- `examples`: `ai.nooa.examples.release` — a payload-free release-gate agent demonstrating the enum-with-abstract-methods state-machine idiom
+- Tests: pure transition coverage, scripted agent end-to-end (approved, rejected, critical, illegal-transition), and an `EvalRunner` goal-state evaluation over the incident workflow
+- `docs/concepts.md` now contrasts the enum and sealed-types state-machine idioms
+
 ## v0.8.5 (2026-10-01)
 
 ### Added
