@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.9.4 (2026-10-01)
+
+### Fixed
+- `IncidentAgent` no longer relies on CodeAct for a structured final value: the investigation step is split into a CodeAct `scanTelemetry()` that inspects telemetry and returns a String, plus a `PredictStrategy` `investigate(report, observations)` that produces the typed `Hypothesis`. Small models frequently returned a plain string/array for the record, exhausting CodeAct retries.
+
 ## v0.9.3 (2026-10-01)
 
 ### Fixed
