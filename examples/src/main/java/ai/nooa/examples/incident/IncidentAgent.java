@@ -21,9 +21,10 @@ import java.util.List;
  *       is the only place the state advances, via {@link #fire}. Illegal
  *       transitions raise a typed {@link IllegalTransition}.</li>
  *   <li><b>The model produces typed payloads.</b> {@code assess},
- *       {@code proposePlan}, and {@code writePostmortem} use
- *       {@link PredictStrategy} with record contracts; {@code investigate} uses
- *       the default CodeAct strategy to slice telemetry with helper methods.</li>
+ *       {@code investigate}, {@code proposePlan}, and {@code writePostmortem}
+ *       use {@link PredictStrategy} with record contracts; {@code scanTelemetry}
+ *       uses the default CodeAct strategy to inspect telemetry with helper
+ *       methods (code-as-action) and return a compact observations string.</li>
  *   <li><b>Humans approve</b> the remediation through an {@link ApprovalGate}
  *       before it is applied.</li>
  * </ul>
@@ -61,12 +62,17 @@ public class IncidentAgent extends Agent {
         throw new UnsupportedOperationException();
     }
 
-    @Generate(prompt = "Investigate the incident. Call breachedMetrics(), "
-        + "errorLogs(limit), and recentDeploys() to gather evidence, then call "
-        + "returnResult with an object containing: summary (one sentence naming "
-        + "the likely root cause) and evidence (a list of the concrete "
-        + "observations you used). Do not return plain text.")
-    public Hypothesis investigate(IncidentReport report) {
+    @Generate(prompt = "Inspect the telemetry using the helper methods "
+        + "(breachedMetrics(), errorLogs(limit), recentDeploys()). Return a "
+        + "concise, factual summary of the most relevant observations.")
+    public String scanTelemetry() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Generate(prompt = "Using the incident report and the observations, state the "
+        + "most likely root cause and the concrete evidence that supports it.")
+    @Strategy(PredictStrategy.class)
+    public Hypothesis investigate(IncidentReport report, String observations) {
         throw new UnsupportedOperationException();
     }
 
@@ -125,7 +131,7 @@ public class IncidentAgent extends Agent {
             return outcome();
         }
 
-        var hypothesis = investigate(report);
+        var hypothesis = investigate(report, scanTelemetry());
         fire(new IncidentEvent.Investigate(hypothesis));
 
         var plan = proposePlan(report, hypothesis);

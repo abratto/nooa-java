@@ -21,20 +21,23 @@ class IncidentEvalTest {
     /** Scripts the model calls for the resolved and escalated cases, in order. */
     private static FakeLLMClient scripted() {
         var llm = new FakeLLMClient();
-        // Case 1 — respondAuto (assess, investigate, proposePlan, writePostmortem)
+        // Case 1 — respondAuto (assess, scanTelemetry, investigate, proposePlan, writePostmortem)
         llm.respondWith("{\"level\":\"HIGH\",\"rationale\":\"breach\"}");
-        llm.respondWith(List.of(new LLMResponse.ToolCall("c1", "executeJava", Map.of("code",
-            "returnResult(java.util.Map.of(\"summary\",\"db pool exhausted\","
-                + "\"evidence\", java.util.List.of(\"HikariPool timeouts\")));"))));
+        llm.respondWith(scanTelemetryCall("c1"));
+        llm.respondWith("{\"summary\":\"db pool exhaustion\",\"evidence\":[\"HikariPool timeouts\"]}");
         llm.respondWith("{\"steps\":[\"rollback\"],\"risk\":\"low\",\"rollback\":\"redeploy\"}");
         llm.respondWith("{\"summary\":\"resolved\",\"followUps\":[\"add alert\"]}");
-        // Case 2 — respondRejected (assess, investigate, proposePlan)
+        // Case 2 — respondRejected (assess, scanTelemetry, investigate, proposePlan)
         llm.respondWith("{\"level\":\"HIGH\",\"rationale\":\"breach\"}");
-        llm.respondWith(List.of(new LLMResponse.ToolCall("c2", "executeJava", Map.of("code",
-            "returnResult(java.util.Map.of(\"summary\",\"db pool exhausted\","
-                + "\"evidence\", java.util.List.of(\"HikariPool timeouts\")));"))));
+        llm.respondWith(scanTelemetryCall("c2"));
+        llm.respondWith("{\"summary\":\"db pool exhaustion\",\"evidence\":[\"HikariPool timeouts\"]}");
         llm.respondWith("{\"steps\":[\"rollback\"],\"risk\":\"low\",\"rollback\":\"redeploy\"}");
         return llm;
+    }
+
+    private static List<LLMResponse.ToolCall> scanTelemetryCall(String id) {
+        return List.of(new LLMResponse.ToolCall(id, "executeJava", Map.of("code",
+            "returnResult(\"HikariPool timeouts; p99 2.4s\");")));
     }
 
     @Test

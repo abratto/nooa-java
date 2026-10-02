@@ -17,12 +17,19 @@ class IncidentAgentTest {
 
     private static FakeLLMClient happyPathLlm() {
         var llm = new FakeLLMClient();
+        // assess (Predict)
         llm.respondWith("{\"level\":\"HIGH\",\"rationale\":\"p99 breach and DB pool exhaustion\"}");
+        // scanTelemetry (CodeAct, String)
         llm.respondWith(List.of(new LLMResponse.ToolCall("c1", "executeJava", Map.of("code",
-            "returnResult(java.util.Map.of(\"summary\",\"db pool exhausted\","
-                + "\"evidence\", java.util.List.of(\"HikariPool timeouts\",\"p99 2.4s\")));"))));
+            "returnResult(\"HikariPool connection timeouts; p99 2.4s; "
+                + "recent deploy checkout-api@a1b2c3\");"))));
+        // investigate (Predict)
+        llm.respondWith("{\"summary\":\"database connection pool exhaustion after the "
+            + "settlement change\",\"evidence\":[\"HikariPool timeouts\",\"p99 2.4s\"]}");
+        // proposePlan (Predict)
         llm.respondWith("{\"steps\":[\"rollback checkout-api\"],\"risk\":\"low\","
             + "\"rollback\":\"redeploy previous release\"}");
+        // writePostmortem (Predict)
         llm.respondWith("{\"summary\":\"db pool exhaustion after settlement change\","
             + "\"followUps\":[\"add pool saturation alert\"]}");
         return llm;
@@ -47,8 +54,8 @@ class IncidentAgentTest {
         var llm = new FakeLLMClient();
         llm.respondWith("{\"level\":\"HIGH\",\"rationale\":\"breach\"}");
         llm.respondWith(List.of(new LLMResponse.ToolCall("c1", "executeJava", Map.of("code",
-            "returnResult(java.util.Map.of(\"summary\",\"db pool exhausted\","
-                + "\"evidence\", java.util.List.of(\"timeouts\")));"))));
+            "returnResult(\"HikariPool timeouts; p99 2.4s\");"))));
+        llm.respondWith("{\"summary\":\"db pool exhaustion\",\"evidence\":[\"timeouts\"]}");
         llm.respondWith("{\"steps\":[\"rollback\"],\"risk\":\"low\",\"rollback\":\"redeploy\"}");
 
         var scenario = IncidentScenarios.checkoutLatency();
