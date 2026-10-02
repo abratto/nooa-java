@@ -48,7 +48,18 @@ public final class PredictStrategy implements GenerationStrategy {
                 }
             }
         }
-        throw new GenerationError("PredictStrategy failed after " + config.maxRetries() + " attempts", lastError);
+        throw new GenerationError("PredictStrategy failed after " + config.maxRetries()
+            + " attempts: " + describeError(lastError), lastError);
+    }
+
+    private static String describeError(Throwable error) {
+        if (error == null) {
+            return "unknown error";
+        }
+        String message = error.getMessage();
+        return (message == null || message.isBlank())
+            ? error.getClass().getSimpleName()
+            : message;
     }
 
     private String retryDiagnostic(Exception error, Type returnType) {

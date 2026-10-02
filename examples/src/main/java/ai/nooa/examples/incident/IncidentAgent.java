@@ -61,9 +61,11 @@ public class IncidentAgent extends Agent {
         throw new UnsupportedOperationException();
     }
 
-    @Generate(prompt = "Investigate the incident. Call the telemetry helper "
-        + "methods to gather evidence, then return a root-cause hypothesis with "
-        + "the concrete evidence you observed.")
+    @Generate(prompt = "Investigate the incident. Call breachedMetrics(), "
+        + "errorLogs(limit), and recentDeploys() to gather evidence, then call "
+        + "returnResult with an object containing: summary (one sentence naming "
+        + "the likely root cause) and evidence (a list of the concrete "
+        + "observations you used). Do not return plain text.")
     public Hypothesis investigate(IncidentReport report) {
         throw new UnsupportedOperationException();
     }

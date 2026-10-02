@@ -143,10 +143,34 @@ public final class CodeActStrategy implements GenerationStrategy {
             return Map.of("type", "number");
         }
         if (type.isEnum()) {
-            return Map.of("type", STRING_TYPE);
+            return Map.of("type", STRING_TYPE,
+                "enum", java.util.Arrays.stream(type.getEnumConstants())
+                    .map(String::valueOf).toList());
         }
-        if (type.isArray() || java.util.Collection.class.isAssignableFrom(type)) {
+        // Records are the common structured-output contract. Build the schema
+        // from the record components so the model knows the required fields,
+        // rather than relying on jackson-module-jsonSchema (not a dependency).
+        if (type.isRecord()) {
+            Map<String, Object> properties = new LinkedHashMap<>();
+            List<String> required = new java.util.ArrayList<>();
+            for (var component : type.getRecordComponents()) {
+                properties.put(component.getName(), schemaFor(component.getType()));
+                required.add(component.getName());
+            }
+            Map<String, Object> recordSchema = new LinkedHashMap<>();
+            recordSchema.put("type", OBJECT_TYPE);
+            recordSchema.put("properties", properties);
+            recordSchema.put("required", required);
+            return recordSchema;
+        }
+        if (type.isArray()) {
+            return Map.of("type", "array", "items", schemaFor(type.getComponentType()));
+        }
+        if (java.util.Collection.class.isAssignableFrom(type)) {
             return Map.of("type", "array", "items", Map.of());
+        }
+        if (java.util.Map.class.isAssignableFrom(type)) {
+            return Map.of("type", OBJECT_TYPE);
         }
         try {
             @SuppressWarnings("deprecation")
@@ -264,11 +288,23 @@ public final class CodeActStrategy implements GenerationStrategy {
                 runtime.eventManager().add(new Event.AfterTurn(
                     iteration, false, false, e.getClass().getSimpleName()));
                 if (iteration >= config.maxRetries()) {
-                    throw new GenerationError("CodeActStrategy failed after " + iteration + " iterations", lastError);
+                    throw new GenerationError("CodeActStrategy failed after " + iteration
+                        + " attempts: " + describeError(lastError), lastError);
                 }
             }
         }
-        throw new GenerationError("Max iterations exceeded (" + config.maxIterations() + ")", lastError);
+        throw new GenerationError("Max iterations exceeded (" + config.maxIterations() + "): "
+            + describeError(lastError), lastError);
+    }
+
+    private static String describeError(Throwable error) {
+        if (error == null) {
+            return "unknown error";
+        }
+        String message = error.getMessage();
+        return (message == null || message.isBlank())
+            ? error.getClass().getSimpleName()
+            : message;
     }
 
     private static final Object _RETURN_SENTINEL = new Object();

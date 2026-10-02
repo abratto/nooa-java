@@ -207,6 +207,48 @@ class CodeActStrategyTest {
         @SuppressWarnings("unchecked")
         var valueSchema = (Map<String, Object>) properties.get("value");
         assertThat(valueSchema).containsKey("properties");
+
+        // Record components must be described so the model knows the shape.
+        @SuppressWarnings("unchecked")
+        var fields = (Map<String, Object>) valueSchema.get("properties");
+        assertThat(fields).containsKeys("text", "count");
+        @SuppressWarnings("unchecked")
+        var required = (List<String>) valueSchema.get("required");
+        assertThat(required).containsExactlyInAnyOrder("text", "count");
+    }
+
+    @Test
+    @DisplayName("a JSON string returnResult value is parsed into the record")
+    void jsonStringReturnValueIsParsed() throws Exception {
+        var jsonLlm = new FakeLLMClient();
+        var jsonAgent = new TypedAgent(jsonLlm);
+        jsonLlm.respondWith(List.of(new LLMResponse.ToolCall("c1", "returnResult", Map.of(
+            "value", "{\"text\":\"hi\",\"count\":3}"))));
+
+        var call = CurrentCall.fromMethod(
+            TypedAgent.class.getDeclaredMethod("generate", String.class), new Object[]{"test"});
+        var result = strategy.execute(jsonAgent.runtime(), call);
+
+        assertThat(result).isEqualTo(new Result("hi", 3));
+        jsonAgent.close();
+    }
+
+    @Test
+    @DisplayName("a plain string for a record return type fails with corrective guidance")
+    void plainStringForRecordFailsWithGuidance() throws Exception {
+        var badLlm = new FakeLLMClient();
+        var badAgent = new TypedAgent(badLlm);
+        // FakeLLMClient repeats the last response, so every retry fails the same way.
+        badLlm.respondWith(List.of(new LLMResponse.ToolCall("c1", "returnResult",
+            Map.of("value", "this is not an object"))));
+
+        var call = CurrentCall.fromMethod(
+            TypedAgent.class.getDeclaredMethod("generate", String.class), new Object[]{"test"});
+
+        assertThatThrownBy(() -> strategy.execute(badAgent.runtime(), call))
+            .isInstanceOf(ai.nooa.GenerationError.class)
+            .hasMessageContaining("text, count");
+        badAgent.close();
     }
 
     @Test

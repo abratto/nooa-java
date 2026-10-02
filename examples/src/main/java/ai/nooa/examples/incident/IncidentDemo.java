@@ -45,22 +45,12 @@ public final class IncidentDemo {
                 }
             } catch (RuntimeException e) {
                 System.out.println();
-                System.out.println("Incident demo failed: " + rootMessage(e));
+                System.out.println("Incident demo failed: " + e.getMessage());
                 System.out.println("Check the model endpoint — set NOOA_BASE_URL/NOOA_MODEL, "
                     + "or start a local Ollama on http://localhost:11434.");
                 return;
             }
         }
-    }
-
-    private static String rootMessage(Throwable error) {
-        Throwable root = error;
-        while (root.getCause() != null && root.getCause() != root) {
-            root = root.getCause();
-        }
-        return root == error
-            ? String.valueOf(error.getMessage())
-            : error.getMessage() + " (" + root.getMessage() + ")";
     }
 
     private static ApprovalGate consoleGate() {
