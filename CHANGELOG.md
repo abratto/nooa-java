@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.1 (2026-10-01)
+
+### Fixed
+- `UnifiedLLM.chat` now reports the model and base URL and falls back to the exception type when the underlying message is null, instead of `LLM call failed: null`
+- `IncidentDemo` catches model-call failures, prints the root cause, and gives endpoint guidance instead of aborting with an opaque exec error
+
 ## v0.9.0 (2026-10-01)
 
 ### Added
