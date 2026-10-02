@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.9.3 (2026-10-01)
+
+### Fixed
+- `CodeActStrategy` now builds the `returnResult` schema for records and enums from their components and constants (previously it fell back to a bare object schema because `jackson-module-jsonSchema` is not a dependency), so the model is told the required fields
+- `CodeActStrategy` and `PredictStrategy` final failure messages include the last error cause instead of only an attempt count; a JSON-string `returnResult` value is parsed into the declared record
+- `IncidentAgent`'s investigation prompt now states the required `Hypothesis` shape (`summary`, `evidence`)
+
 ## v0.9.2 (2026-10-01)
 
 ### Fixed
